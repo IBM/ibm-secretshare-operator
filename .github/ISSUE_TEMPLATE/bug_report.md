@@ -19,7 +19,7 @@ about: Tell us about a problem you are experiencing
 
 **Environment:**
 
-- ODLM version:
+- IBM SecretShare Operator version:
 - Minikube/KIND/OCP version:
 - Kubernetes version: (use `kubectl version`):
 - OS (e.g. from `/etc/os-release`):
