@@ -72,6 +72,34 @@ endif
 
 include common/Makefile.common.mk
 
+##@ Application
+
+install: ## Install all resources (CR/CRD's, RBAC and Operator)
+	@echo ....... Creating namespace .......
+	- $(KUBECTL) create namespace ${NAMESPACE}
+	@echo ....... Applying CRDs .......
+	- $(KUBECTL) apply -f deploy/crds/ibmcpcs.ibm.com_secretshares_crd.yaml
+	@echo ....... Applying RBAC .......
+	- $(KUBECTL) apply -f deploy/service_account.yaml -n ${NAMESPACE}
+	- $(KUBECTL) apply -f deploy/role.yaml
+	- $(KUBECTL) apply -f deploy/role_binding.yaml
+	# @echo ....... Applying Operator .......
+	- $(KUBECTL) apply -f deploy/operator.yaml -n ${NAMESPACE}
+	@echo ....... Creating the Instances .......
+	- $(KUBECTL) apply -f deploy/crds/ibmcpcs.ibm.com_v1_secretshare_cr.yaml -n ${NAMESPACE}
+uninstall: ## Uninstall all that all performed in the $ make install
+	@echo ....... Uninstalling .......
+	@echo ....... Deleting the Instances .......
+	- $(KUBECTL) delete -f deploy/crds/ibmcpcs.ibm.com_v1_secretshare_cr.yaml -n ${NAMESPACE} --ignore-not-found
+	@echo ....... Deleting Operator .......
+	- $(KUBECTL) delete -f deploy/operator.yaml -n ${NAMESPACE} --ignore-not-found
+	@echo ....... Deleting CRDs .......
+	- $(KUBECTL) delete -f deploy/crds/ibmcpcs.ibm.com_secretshares_crd.yaml --ignore-not-found
+	@echo ....... Deleting RBAC .......
+	- $(KUBECTL) delete -f deploy/role_binding.yaml --ignore-not-found
+	- $(KUBECTL) delete -f deploy/service_account.yaml -n ${NAMESPACE} --ignore-not-found
+	- $(KUBECTL) delete -f deploy/role.yaml --ignore-not-found
+
 ##@ Development
 
 check: lint-all ## Check all files lint error

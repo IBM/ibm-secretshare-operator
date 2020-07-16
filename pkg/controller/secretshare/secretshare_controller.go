@@ -20,7 +20,6 @@ import (
 	"context"
 	"time"
 
-	ibmcpcsv1 "github.com/IBM/ibm-secretshare-operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	ibmcpcsv1 "github.com/IBM/ibm-secretshare-operator/pkg/apis/ibmcpcs/v1"
 )
 
 // Add creates a new SecretShare Controller and adds it to the Manager. The Manager will set fields on the Controller
