@@ -20,7 +20,7 @@ import (
 	"context"
 	"time"
 
-	ibmcpcsv1 "github.com/IBM/ibm-secretshare-operator/pkg/apis/ibmcpcs/v1"
+	ibmcpcsv1 "github.com/IBM/ibm-secretshare-operator/pkg/apis/operator/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -207,7 +207,7 @@ func (r *ReconcileSecretShare) copyConfigmap(instance *ibmcpcsv1.SecretShare) bo
 func (r *ReconcileSecretShare) copySecrettoTargetNs(secret *corev1.Secret, targetNs string) error {
 	secretlabel := make(map[string]string)
 	// Copy from the original labels to the target labels
-	klog.Infof("Copy secret %s to %s namespace", secretName, targetNs)
+	klog.Infof("Copy secret %s to %s namespace", secret.Name, targetNs)
 	for k, v := range secret.Labels {
 		secretlabel[k] = v
 	}
@@ -231,7 +231,7 @@ func (r *ReconcileSecretShare) copySecrettoTargetNs(secret *corev1.Secret, targe
 func (r *ReconcileSecretShare) copyConfigmaptoTargetNs(cm *corev1.ConfigMap, targetNs string) error {
 	cmlabel := make(map[string]string)
 	// Copy from the original labels to the target labels
-	klog.Infof("Copy configmap %s to %s namespace", cmName, targetNs)
+	klog.Infof("Copy configmap %s to %s namespace", cm.Name, targetNs)
 	for k, v := range cm.Labels {
 		cmlabel[k] = v
 	}
