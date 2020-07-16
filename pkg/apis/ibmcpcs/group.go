@@ -14,9 +14,9 @@
 // limitations under the License.
 //
 
-// Package operator contains operators API versions.
+// Package ibmcpcs contains ibmcpcs API versions.
 //
-// This file ensures Go source parsers acknowledge the operators package
+// This file ensures Go source parsers acknowledge the ibmcpcs package
 // and any child packages. It can be removed if any other Go source files are
 // added to this package.
-package operator
+package ibmcpcs
