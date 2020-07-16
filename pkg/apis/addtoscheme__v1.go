@@ -17,7 +17,7 @@
 package apis
 
 import (
-	v1 "github.com/IBM/ibm-secretshare-operator/pkg/apis/operator/v1"
+	v1 "github.com/IBM/ibm-secretshare-operator/pkg/apis/ibmcpcs/v1"
 )
 
 func init() {
