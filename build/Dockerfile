@@ -20,7 +20,7 @@ ENV OPERATOR=/usr/local/bin/secretshare \
     USER_NAME=secretshare
 
 # install operator binary
-COPY build/_output/bin/secretshare ${OPERATOR}
+COPY build/_output/bin/ibm-secretshare-operator ${OPERATOR}
 
 COPY build/bin /usr/local/bin
 RUN  /usr/local/bin/user_setup
