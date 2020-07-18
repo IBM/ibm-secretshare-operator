@@ -109,6 +109,23 @@ func (r *ReconcileSecretShare) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if instance.EnsureFinalizer() {
+		// Update CR
+		err := r.client.Update(context.TODO(), instance)
+		if err != nil {
+			klog.Errorf("Failed to update the SecretShare %s in the namespace %s: %s", instance.Name, instance.Namespace, err)
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Remove finalizer when DeletionTimestamp none zero
+	if !instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.cleanupCopies(instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+
 	if r.copySecretConfigmap(instance) {
 		return reconcile.Result{RequeueAfter: time.Minute * 5}, nil
 	}
@@ -154,7 +171,7 @@ func (r *ReconcileSecretShare) copySecret(instance *ibmcpcsv1.SecretShare) bool 
 				requeue = true
 				continue
 			}
-			if err := r.copySecrettoTargetNs(secret, ns.Namespace); err != nil {
+			if err := r.copySecrettoTargetNs(instance, secret, ns.Namespace); err != nil {
 				klog.Error(err)
 				requeue = true
 				continue
@@ -195,7 +212,7 @@ func (r *ReconcileSecretShare) copyConfigmap(instance *ibmcpcsv1.SecretShare) bo
 				requeue = true
 				continue
 			}
-			if err := r.copyConfigmaptoTargetNs(cm, ns.Namespace); err != nil {
+			if err := r.copyConfigmaptoTargetNs(instance, cm, ns.Namespace); err != nil {
 				klog.Error(err)
 				requeue = true
 				continue
@@ -205,13 +222,14 @@ func (r *ReconcileSecretShare) copyConfigmap(instance *ibmcpcsv1.SecretShare) bo
 	return requeue
 }
 
-func (r *ReconcileSecretShare) copySecrettoTargetNs(secret *corev1.Secret, targetNs string) error {
+func (r *ReconcileSecretShare) copySecrettoTargetNs(instance *ibmcpcsv1.SecretShare, secret *corev1.Secret, targetNs string) error {
 	secretlabel := make(map[string]string)
 	// Copy from the original labels to the target labels
 	klog.Infof("Copy secret %s to %s namespace", secret.Name, targetNs)
 	for k, v := range secret.Labels {
 		secretlabel[k] = v
 	}
+	secretlabel[instance.Namespace+"."+instance.Name+"/secretshare"] = "true"
 	secretlabel["ibmcpcs.ibm.com/managed-by"] = "secretshare"
 	targetSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -229,25 +247,63 @@ func (r *ReconcileSecretShare) copySecrettoTargetNs(secret *corev1.Secret, targe
 	return nil
 }
 
-func (r *ReconcileSecretShare) copyConfigmaptoTargetNs(cm *corev1.ConfigMap, targetNs string) error {
+func (r *ReconcileSecretShare) copyConfigmaptoTargetNs(instance *ibmcpcsv1.SecretShare, cm *corev1.ConfigMap, targetNs string) error {
 	cmlabel := make(map[string]string)
 	// Copy from the original labels to the target labels
 	klog.Infof("Copy configmap %s to %s namespace", cm.Name, targetNs)
 	for k, v := range cm.Labels {
 		cmlabel[k] = v
 	}
+	cmlabel[instance.Namespace+"."+instance.Name+"/secretshare"] = "true"
 	cmlabel["ibmcpcs.ibm.com/managed-by"] = "secretshare"
 	targetCm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cm.Name,
 			Namespace: targetNs,
-			Labels:    cm.Labels,
+			Labels:    cmlabel,
 		},
 		Data:       cm.Data,
 		BinaryData: cm.BinaryData,
 	}
 	if err := r.createUpdateCm(targetCm); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (r *ReconcileSecretShare) cleanupCopies(ss *ibmcpcsv1.SecretShare) error {
+	secretList := &corev1.SecretList{}
+	cmList := &corev1.ConfigMapList{}
+
+	opts := []client.ListOption{
+		client.MatchingLabels(map[string]string{ss.Namespace + "." + ss.Name + "/secretshare": "true"}),
+	}
+	if err := r.client.List(context.TODO(), secretList, opts...); err != nil {
+		return err
+	}
+
+	for _, secret := range secretList.Items {
+		if err := r.client.Delete(context.TODO(), &secret); err != nil {
+			return err
+		}
+	}
+
+	if err := r.client.List(context.TODO(), cmList, opts...); err != nil {
+		return err
+	}
+
+	for _, cm := range cmList.Items {
+		if err := r.client.Delete(context.TODO(), &cm); err != nil {
+			return err
+		}
+	}
+	// Update finalizer to allow delete CR
+	removed := ss.RemoveFinalizer()
+	if removed {
+		err := r.client.Update(context.TODO(), ss)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

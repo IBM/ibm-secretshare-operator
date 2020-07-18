@@ -87,3 +87,34 @@ type SecretShareList struct {
 func init() {
 	SchemeBuilder.Register(&SecretShare{}, &SecretShareList{})
 }
+
+// RemoveFinalizer removes the operator source finalizer from the
+// SecretShare ObjectMeta.
+func (r *SecretShare) RemoveFinalizer() bool {
+	outFinalizers := make([]string, 0)
+	var changed bool
+	for _, finalizer := range r.ObjectMeta.Finalizers {
+		if finalizer == "finalizer.secretshare.ibm.com" {
+			changed = true
+			continue
+		}
+		outFinalizers = append(outFinalizers, finalizer)
+	}
+
+	r.ObjectMeta.Finalizers = outFinalizers
+	return changed
+}
+
+// EnsureFinalizer ensures that the operator source finalizer is included
+// in the ObjectMeta.Finalizer slice. If it already exists, no state change occurs.
+// If it doesn't, the finalizer is appended to the slice.
+func (r *SecretShare) EnsureFinalizer() bool {
+	for _, finalizer := range r.ObjectMeta.Finalizers {
+		if finalizer == "finalizer.secretshare.ibm.com" {
+			return false
+		}
+	}
+
+	r.ObjectMeta.Finalizers = append(r.ObjectMeta.Finalizers, "finalizer.secretshare.ibm.com")
+	return true
+}
