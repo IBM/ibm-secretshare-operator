@@ -20,8 +20,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// MemberPhase identifies the status of the
+type MemberPhase string
+
+// Constants are used for status management
+const (
+	Running MemberPhase = "Running"
+	Failed  MemberPhase = "Failed"
+	None    MemberPhase = ""
+)
 
 // SecretShareSpec defines the desired state of SecretShare
 type SecretShareSpec struct {
@@ -60,6 +67,9 @@ type SecretShareStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+	// Members represnets the current operand status of the set
+	// +optional
+	Members map[string]MemberPhase `json:"members,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -86,4 +96,38 @@ type SecretShareList struct {
 
 func init() {
 	SchemeBuilder.Register(&SecretShare{}, &SecretShareList{})
+}
+
+// InitStatus check the status of a secret/configmap
+func (r *SecretShare) InitStatus() bool {
+	if r.Status.Members == nil {
+		r.Status.Members = map[string]MemberPhase{}
+		return true
+	}
+	return false
+}
+
+// UpdateStatus updates the status of a secret/configmap
+func (r *SecretShare) UpdateStatus(namespacedName string, status MemberPhase) bool {
+	if r.Status.Members[namespacedName] == status {
+		return false
+	}
+	r.Status.Members[namespacedName] = status
+	return true
+}
+
+// CheckStatus check the status of a secret/configmap
+func (r *SecretShare) CheckStatus(namespacedName string, status MemberPhase) bool {
+	if len(r.Status.Members) == 0 {
+		return false
+	}
+	if r.Status.Members[namespacedName] == status {
+		return true
+	}
+	return false
+}
+
+// RemoveStatus removes the status of a secret/configmap
+func (r *SecretShare) RemoveStatus(namespacedName string) {
+	delete(r.Status.Members, namespacedName)
 }
