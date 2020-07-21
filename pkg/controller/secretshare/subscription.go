@@ -14,15 +14,22 @@
 // limitations under the License.
 //
 
-package apis
+package secretshare
 
 import (
-	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
+	"context"
 
-	v1 "github.com/IBM/ibm-secretshare-operator/pkg/apis/ibmcpcs/v1"
+	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog"
 )
 
-func init() {
-	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
-	AddToSchemes = append(AddToSchemes, olmv1alpha1.SchemeBuilder.AddToScheme, v1.SchemeBuilder.AddToScheme)
+// checkSub gets the subscription
+func (r *ReconcileSecretShare) checkSub(name, namespace string) bool {
+	sub := &olmv1alpha1.Subscription{}
+	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, sub); err != nil {
+		klog.Error(err)
+		return false
+	}
+	return true
 }

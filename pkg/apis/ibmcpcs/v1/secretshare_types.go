@@ -25,9 +25,11 @@ type MemberPhase string
 
 // Constants are used for status management
 const (
-	Running MemberPhase = "Running"
-	Failed  MemberPhase = "Failed"
-	None    MemberPhase = ""
+	Running    MemberPhase = "Running"
+	Failed     MemberPhase = "Failed"
+	NotFound   MemberPhase = "NotFound"
+	NotEnabled MemberPhase = "NotEnabled"
+	None       MemberPhase = ""
 )
 
 // SecretShareSpec defines the desired state of SecretShare
@@ -62,14 +64,22 @@ type Configmapshare struct {
 	Sharewith []TargetNamespace `json:"sharewith"`
 }
 
-// SecretShareStatus defines the observed state of SecretShare
+// SecretShareStatus defines the observed status of SecretShare
 type SecretShareStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 	// Members represnets the current operand status of the set
 	// +optional
-	Members map[string]MemberPhase `json:"members,omitempty"`
+	Members SecretConfigmapMembers `json:"members,omitempty"`
+}
+
+// SecretConfigmapMembers defines the observed status of SecretShare
+type SecretConfigmapMembers struct {
+	// SecretMembers represnets the current operand status of the set
+	// +optional
+	SecretMembers map[string]MemberPhase `json:"secretMembers,omitempty"`
+
+	// ConfigmapMembers represnets the current operand status of the set
+	// +optional
+	ConfigmapMembers map[string]MemberPhase `json:"ConfigmapMembers,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -100,34 +110,64 @@ func init() {
 
 // InitStatus check the status of a secret/configmap
 func (r *SecretShare) InitStatus() bool {
-	if r.Status.Members == nil {
-		r.Status.Members = map[string]MemberPhase{}
-		return true
+	change := false
+	if r.Status.Members.ConfigmapMembers == nil {
+		r.Status.Members.ConfigmapMembers = map[string]MemberPhase{}
+		change = true
 	}
-	return false
+	if r.Status.Members.SecretMembers == nil {
+		r.Status.Members.SecretMembers = map[string]MemberPhase{}
+		change = true
+	}
+	return change
 }
 
-// UpdateStatus updates the status of a secret/configmap
-func (r *SecretShare) UpdateStatus(namespacedName string, status MemberPhase) bool {
-	if r.Status.Members[namespacedName] == status {
+// UpdateSecretStatus updates the status of a secret
+func (r *SecretShare) UpdateSecretStatus(namespacedName string, status MemberPhase) bool {
+	if r.Status.Members.SecretMembers[namespacedName] == status {
 		return false
 	}
-	r.Status.Members[namespacedName] = status
+	r.Status.Members.SecretMembers[namespacedName] = status
 	return true
 }
 
-// CheckStatus check the status of a secret/configmap
-func (r *SecretShare) CheckStatus(namespacedName string, status MemberPhase) bool {
-	if len(r.Status.Members) == 0 {
+// CheckSecretStatus check the status of a secret
+func (r *SecretShare) CheckSecretStatus(namespacedName string, status MemberPhase) bool {
+	if len(r.Status.Members.SecretMembers) == 0 {
 		return false
 	}
-	if r.Status.Members[namespacedName] == status {
+	if r.Status.Members.SecretMembers[namespacedName] == status {
 		return true
 	}
 	return false
 }
 
-// RemoveStatus removes the status of a secret/configmap
-func (r *SecretShare) RemoveStatus(namespacedName string) {
-	delete(r.Status.Members, namespacedName)
+// RemoveSecretStatus removes the status of a secret
+func (r *SecretShare) RemoveSecretStatus(namespacedName string) {
+	delete(r.Status.Members.SecretMembers, namespacedName)
+}
+
+// UpdateConfigmapStatus updates the status of a configmap
+func (r *SecretShare) UpdateConfigmapStatus(namespacedName string, status MemberPhase) bool {
+	if r.Status.Members.ConfigmapMembers[namespacedName] == status {
+		return false
+	}
+	r.Status.Members.ConfigmapMembers[namespacedName] = status
+	return true
+}
+
+// CheckConfigmapStatus check the status of a configmap
+func (r *SecretShare) CheckConfigmapStatus(namespacedName string, status MemberPhase) bool {
+	if len(r.Status.Members.ConfigmapMembers) == 0 {
+		return false
+	}
+	if r.Status.Members.ConfigmapMembers[namespacedName] == status {
+		return true
+	}
+	return false
+}
+
+// RemoveConfigmapStatus removes the status of a configmap
+func (r *SecretShare) RemoveConfigmapStatus(namespacedName string) {
+	delete(r.Status.Members.ConfigmapMembers, namespacedName)
 }

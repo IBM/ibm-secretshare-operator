@@ -24,6 +24,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -102,10 +103,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	retryPeriod := 5 * time.Minute
+
 	// Set default manager options
 	options := manager.Options{
 		Namespace:          namespace,
 		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		RetryPeriod:        &retryPeriod,
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
