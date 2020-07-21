@@ -16,7 +16,7 @@ spec:
       containers:
         - name: secretshare
           # Replace this with the built image name
-          image: quay.io/opencloudio/ibm-secretshare-operator:v1.2
+          image: quay.io/opencloudio/ibm-secretshare-operator:latest
           command:
           - secretshare
           imagePullPolicy: Always

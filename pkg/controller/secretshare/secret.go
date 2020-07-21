@@ -21,6 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -44,6 +45,20 @@ func (r *ReconcileSecretShare) createSecret(secret *corev1.Secret) error {
 // updateSecret gets the secret required to be copied
 func (r *ReconcileSecretShare) updateSecret(secret *corev1.Secret) error {
 	if err := r.client.Update(context.TODO(), secret); err != nil {
+		return err
+	}
+	return nil
+}
+
+// deleteSecret deletes the copied secrets
+func (r *ReconcileSecretShare) deleteSecret(secretName, ns string) error {
+	copiedSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: ns,
+		},
+	}
+	if err := r.client.Delete(context.TODO(), copiedSecret); err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 	return nil
