@@ -21,6 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -44,6 +45,20 @@ func (r *ReconcileSecretShare) createCm(cm *corev1.ConfigMap) error {
 // updateCm gets the configmap required to be copied
 func (r *ReconcileSecretShare) updateCm(cm *corev1.ConfigMap) error {
 	if err := r.client.Update(context.TODO(), cm); err != nil {
+		return err
+	}
+	return nil
+}
+
+// deleteCm deletes the copied configmap
+func (r *ReconcileSecretShare) deleteCm(cmName, ns string) error {
+	copiedCm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: ns,
+		},
+	}
+	if err := r.client.Delete(context.TODO(), copiedCm); err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 	return nil

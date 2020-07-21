@@ -109,6 +109,12 @@ func (r *ReconcileSecretShare) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if instance.InitStatus() {
+		if err := r.client.Status().Update(context.TODO(), instance); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	if r.copySecretConfigmap(instance) {
 		return reconcile.Result{RequeueAfter: time.Minute * 5}, nil
 	}
@@ -130,36 +136,59 @@ func (r *ReconcileSecretShare) copySecret(instance *ibmcpcsv1.SecretShare) bool 
 	secretList := instance.Spec.Secretshares
 	requeue := false
 	for _, secretShare := range secretList {
+		running := true
 		secretName := secretShare.Secretname
 		secret, err := r.getSecret(secretName, ns)
 		if err != nil {
-			klog.Error(err)
-			requeue = true
-			continue
-		}
-		// Set SecretShare instance as the owner
-		if err := controllerutil.SetOwnerReference(instance, secret, r.scheme); err != nil {
-			klog.Error(err)
-			requeue = true
-			continue
-		}
-		if err := r.updateSecret(secret); err != nil {
-			klog.Error(err)
-			requeue = true
-			continue
-		}
-		for _, ns := range secretShare.Sharewith {
-			if err := r.ensureNs(ns.Namespace); err != nil {
+			if errors.IsNotFound(err) && instance.CheckStatus(ns+"/"+secretName, ibmcpcsv1.Running) {
+				if r.deleteCopiedSecret(secretName, secretShare) {
+					instance.UpdateStatus(ns+"/"+secretName, ibmcpcsv1.Failed)
+					requeue = true
+					continue
+				}
+				instance.RemoveStatus(ns + "/" + secretName)
+			} else if !errors.IsNotFound(err) {
 				klog.Error(err)
+				instance.UpdateStatus(ns+"/"+secretName, ibmcpcsv1.Failed)
 				requeue = true
 				continue
 			}
-			if err := r.copySecrettoTargetNs(secret, ns.Namespace); err != nil {
+		} else {
+			// Set SecretShare instance as the owner
+			if err := controllerutil.SetOwnerReference(instance, secret, r.scheme); err != nil {
 				klog.Error(err)
+				instance.UpdateStatus(secret.Namespace+"/"+secret.Name, ibmcpcsv1.Failed)
 				requeue = true
 				continue
 			}
+			if err := r.updateSecret(secret); err != nil {
+				klog.Error(err)
+				instance.UpdateStatus(secret.Namespace+"/"+secret.Name, ibmcpcsv1.Failed)
+				requeue = true
+				continue
+			}
+			for _, ns := range secretShare.Sharewith {
+				if err := r.ensureNs(ns.Namespace); err != nil {
+					klog.Error(err)
+					running = false
+					continue
+				}
+				if err := r.copySecrettoTargetNs(secret, ns.Namespace); err != nil {
+					klog.Error(err)
+					running = false
+					continue
+				}
+			}
+			if running {
+				instance.UpdateStatus(secret.Namespace+"/"+secret.Name, ibmcpcsv1.Running)
+			} else {
+				instance.UpdateStatus(secret.Namespace+"/"+secret.Name, ibmcpcsv1.Failed)
+			}
 		}
+		requeue = requeue && !running
+	}
+	if err := r.client.Status().Update(context.TODO(), instance); err != nil {
+		requeue = true
 	}
 	return requeue
 }
@@ -171,36 +200,59 @@ func (r *ReconcileSecretShare) copyConfigmap(instance *ibmcpcsv1.SecretShare) bo
 	cmList := instance.Spec.Configmapshares
 	requeue := false
 	for _, cmShare := range cmList {
+		running := true
 		cmName := cmShare.Configmapname
 		cm, err := r.getCm(cmName, ns)
 		if err != nil {
-			klog.Error(err)
-			requeue = true
-			continue
-		}
-		// Set SecretShare instance as the owner
-		if err := controllerutil.SetOwnerReference(instance, cm, r.scheme); err != nil {
-			klog.Error(err)
-			requeue = true
-			continue
-		}
-		if err := r.updateCm(cm); err != nil {
-			klog.Error(err)
-			requeue = true
-			continue
-		}
-		for _, ns := range cmShare.Sharewith {
-			if err := r.ensureNs(ns.Namespace); err != nil {
+			if errors.IsNotFound(err) && instance.CheckStatus(ns+"/"+cmName, ibmcpcsv1.Running) {
+				if r.deleteCopiedCm(cmName, cmShare) {
+					instance.UpdateStatus(ns+"/"+cmName, ibmcpcsv1.Failed)
+					requeue = true
+					continue
+				}
+				instance.RemoveStatus(ns + "/" + cmName)
+			} else if !errors.IsNotFound(err) {
 				klog.Error(err)
+				instance.UpdateStatus(ns+"/"+cmName, ibmcpcsv1.Failed)
 				requeue = true
 				continue
 			}
-			if err := r.copyConfigmaptoTargetNs(cm, ns.Namespace); err != nil {
+		} else {
+			// Set SecretShare instance as the owner
+			if err := controllerutil.SetOwnerReference(instance, cm, r.scheme); err != nil {
 				klog.Error(err)
+				instance.UpdateStatus(cm.Namespace+"/"+cm.Name, ibmcpcsv1.Failed)
 				requeue = true
 				continue
 			}
+			if err := r.updateCm(cm); err != nil {
+				klog.Error(err)
+				instance.UpdateStatus(cm.Namespace+"/"+cm.Name, ibmcpcsv1.Failed)
+				requeue = true
+				continue
+			}
+			for _, ns := range cmShare.Sharewith {
+				if err := r.ensureNs(ns.Namespace); err != nil {
+					klog.Error(err)
+					running = false
+					continue
+				}
+				if err := r.copyConfigmaptoTargetNs(cm, ns.Namespace); err != nil {
+					klog.Error(err)
+					running = false
+					continue
+				}
+			}
+			if running {
+				instance.UpdateStatus(cm.Namespace+"/"+cm.Name, ibmcpcsv1.Running)
+			} else {
+				instance.UpdateStatus(cm.Namespace+"/"+cm.Name, ibmcpcsv1.Failed)
+			}
 		}
+		requeue = requeue && !running
+	}
+	if err := r.client.Status().Update(context.TODO(), instance); err != nil {
+		requeue = true
 	}
 	return requeue
 }
@@ -250,4 +302,28 @@ func (r *ReconcileSecretShare) copyConfigmaptoTargetNs(cm *corev1.ConfigMap, tar
 		return err
 	}
 	return nil
+}
+
+func (r *ReconcileSecretShare) deleteCopiedSecret(secretName string, secretShare ibmcpcsv1.Secretshare) bool {
+	requeue := false
+	for _, ns := range secretShare.Sharewith {
+		if err := r.deleteSecret(secretName, ns.Namespace); err != nil {
+			klog.Error(err)
+			requeue = true
+			continue
+		}
+	}
+	return requeue
+}
+
+func (r *ReconcileSecretShare) deleteCopiedCm(cmName string, cmShare ibmcpcsv1.Configmapshare) bool {
+	requeue := false
+	for _, ns := range cmShare.Sharewith {
+		if err := r.deleteCm(cmName, ns.Namespace); err != nil {
+			klog.Error(err)
+			requeue = true
+			continue
+		}
+	}
+	return requeue
 }
