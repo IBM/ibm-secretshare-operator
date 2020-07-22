@@ -3,6 +3,7 @@ module github.com/IBM/ibm-secretshare-operator
 go 1.13
 
 require (
+	github.com/operator-framework/operator-lifecycle-manager v3.11.0+incompatible
 	github.com/operator-framework/operator-sdk v0.18.0
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.18.2

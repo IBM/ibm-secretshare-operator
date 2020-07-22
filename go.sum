@@ -155,6 +155,7 @@ github.com/coreos/etcd v3.3.17+incompatible/go.mod h1:uF7uidLiAD3TWHmW31ZFd/JWoc
 github.com/coreos/go-etcd v2.0.0+incompatible/go.mod h1:Jez6KQU2B/sWsbdaef3ED8NzMklzPG4d5KIOhIy30Tk=
 github.com/coreos/go-oidc v2.1.0+incompatible/go.mod h1:CgnwVTmzoESiwO9qyAFEMiHoZ1nMCKZlZ9V6mm3/LKc=
 github.com/coreos/go-semver v0.2.0/go.mod h1:nnelYz7RCh+5ahJtPPxZlU+153eP4D4r3EedlOD2RNk=
+github.com/coreos/go-semver v0.3.0 h1:wkHLiw0WNATZnSG7epLsujiMCgPAc9xhjJ4tgnAxmfM=
 github.com/coreos/go-semver v0.3.0/go.mod h1:nnelYz7RCh+5ahJtPPxZlU+153eP4D4r3EedlOD2RNk=
 github.com/coreos/go-systemd v0.0.0-20180511133405-39ca1b05acc7/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
 github.com/coreos/go-systemd v0.0.0-20181012123002-c6f51f82210d/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
@@ -640,6 +641,8 @@ github.com/openzipkin/zipkin-go v0.1.6/go.mod h1:QgAqvLzwWbR/WpD4A3cGpPtJrZXNIiJ
 github.com/operator-framework/api v0.1.1/go.mod h1:yzNYR7qyJqRGOOp+bT6Z/iYSbSPNxeh3Si93Gx/3OBY=
 github.com/operator-framework/api v0.3.4/go.mod h1:TmRmw+8XOUaDPq6SP9gA8cIexNf/Pq8LMFY7YaKQFTs=
 github.com/operator-framework/api v0.3.7-0.20200528122852-759ca0d84007/go.mod h1:Xbje9x0SHmh0nihE21kpesB38vk3cyxnE6JdDS8Jo1Q=
+github.com/operator-framework/operator-lifecycle-manager v3.11.0+incompatible h1:Po8C8RVLRWq7pNQ5pKonM9CXpC/osoBWbmsuf+HJnSI=
+github.com/operator-framework/operator-lifecycle-manager v3.11.0+incompatible/go.mod h1:Ma5ZXd4S1vmMyewWlF7aO8CZiokR7Sd8dhSfkGkNU4U=
 github.com/operator-framework/operator-registry v1.5.3/go.mod h1:agrQlkWOo1q8U1SAaLSS2WQ+Z9vswNT2M2HFib9iuLY=
 github.com/operator-framework/operator-registry v1.12.1/go.mod h1:rf4b/h77GUv1+geiej2KzGRQr8iBLF4dXNwr5AuGkrQ=
 github.com/operator-framework/operator-registry v1.12.4/go.mod h1:JChIivJVLE1wRbgIhDFzYQYT9yosa2wd6qiTyMuG5mg=
