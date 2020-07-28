@@ -19,10 +19,12 @@ package secretshare
 import (
 	"context"
 
+	"github.com/operator-framework/operator-lifecycle-manager/pkg/lib/ownerutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // getCm gets the configmap required to be copied
@@ -32,22 +34,6 @@ func (r *ReconcileSecretShare) getCm(name, ns string) (*corev1.ConfigMap, error)
 		return nil, err
 	}
 	return cm, nil
-}
-
-// createCm gets the configmap required to be copied
-func (r *ReconcileSecretShare) createCm(cm *corev1.ConfigMap) error {
-	if err := r.client.Create(context.TODO(), cm); err != nil {
-		return err
-	}
-	return nil
-}
-
-// updateCm gets the configmap required to be copied
-func (r *ReconcileSecretShare) updateCm(cm *corev1.ConfigMap) error {
-	if err := r.client.Update(context.TODO(), cm); err != nil {
-		return err
-	}
-	return nil
 }
 
 // deleteCm deletes the copied configmap
@@ -65,20 +51,12 @@ func (r *ReconcileSecretShare) deleteCm(cmName, ns string) error {
 }
 
 // createUpdateCm gets the Configmap required to be copied
-func (r *ReconcileSecretShare) createUpdateCm(cm *corev1.ConfigMap) error {
-	existingCm, err := r.getCm(cm.Name, cm.Namespace)
-	if err != nil && !errors.IsNotFound(err) {
-		return err
-	} else if errors.IsNotFound(err) {
-		if err := r.createCm(cm); err != nil {
-			return err
+func (r *ReconcileSecretShare) createUpdateCm(cm *corev1.ConfigMap, owner ownerutil.Owner) error {
+	_, err := controllerutil.CreateOrUpdate(context.TODO(), r.client, cm, func() error {
+		if owner != nil {
+			ownerutil.EnsureOwner(cm, owner)
 		}
-	} else {
-		existingCm.Data = cm.Data
-		existingCm.BinaryData = cm.BinaryData
-		if err := r.updateCm(existingCm); err != nil {
-			return err
-		}
-	}
-	return nil
+		return nil
+	})
+	return err
 }

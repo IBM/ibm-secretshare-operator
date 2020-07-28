@@ -29,7 +29,6 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -181,13 +180,7 @@ func (r *ReconcileSecretShare) copySecret(instance *ibmcpcsv1.SecretShare) bool 
 			}
 		} else {
 			// Set SecretShare instance as the owner
-			if err := controllerutil.SetOwnerReference(instance, secret, r.scheme); err != nil {
-				klog.Error(err)
-				instance.UpdateSecretStatus(secret.Namespace+"/"+secret.Name, ibmcpcsv1.Failed)
-				requeue = true
-				continue
-			}
-			if err := r.updateSecret(secret); err != nil {
+			if err := r.createUpdateSecret(secret, instance); err != nil {
 				klog.Error(err)
 				instance.UpdateSecretStatus(secret.Namespace+"/"+secret.Name, ibmcpcsv1.Failed)
 				requeue = true
@@ -254,13 +247,7 @@ func (r *ReconcileSecretShare) copyConfigmap(instance *ibmcpcsv1.SecretShare) bo
 			}
 		} else {
 			// Set SecretShare instance as the owner
-			if err := controllerutil.SetOwnerReference(instance, cm, r.scheme); err != nil {
-				klog.Error(err)
-				instance.UpdateConfigmapStatus(cm.Namespace+"/"+cm.Name, ibmcpcsv1.Failed)
-				requeue = true
-				continue
-			}
-			if err := r.updateCm(cm); err != nil {
+			if err := r.createUpdateCm(cm, instance); err != nil {
 				klog.Error(err)
 				instance.UpdateConfigmapStatus(cm.Namespace+"/"+cm.Name, ibmcpcsv1.Failed)
 				requeue = true
@@ -310,7 +297,7 @@ func (r *ReconcileSecretShare) copySecretToTargetNs(secret *corev1.Secret, targe
 		Data:       secret.Data,
 		StringData: secret.StringData,
 	}
-	if err := r.createUpdateSecret(targetSecret); err != nil {
+	if err := r.createUpdateSecret(targetSecret, nil); err != nil {
 		return err
 	}
 	return nil
@@ -333,7 +320,7 @@ func (r *ReconcileSecretShare) copyConfigmapToTargetNs(cm *corev1.ConfigMap, tar
 		Data:       cm.Data,
 		BinaryData: cm.BinaryData,
 	}
-	if err := r.createUpdateCm(targetCm); err != nil {
+	if err := r.createUpdateCm(targetCm, nil); err != nil {
 		return err
 	}
 	return nil
