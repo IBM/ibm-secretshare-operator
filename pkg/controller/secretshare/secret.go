@@ -19,10 +19,12 @@ package secretshare
 import (
 	"context"
 
+	"github.com/operator-framework/operator-lifecycle-manager/pkg/lib/ownerutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // getSecret gets the secret required to be copied
@@ -32,22 +34,6 @@ func (r *ReconcileSecretShare) getSecret(name, ns string) (*corev1.Secret, error
 		return nil, err
 	}
 	return secret, nil
-}
-
-// createSecret gets the secret required to be copied
-func (r *ReconcileSecretShare) createSecret(secret *corev1.Secret) error {
-	if err := r.client.Create(context.TODO(), secret); err != nil {
-		return err
-	}
-	return nil
-}
-
-// updateSecret gets the secret required to be copied
-func (r *ReconcileSecretShare) updateSecret(secret *corev1.Secret) error {
-	if err := r.client.Update(context.TODO(), secret); err != nil {
-		return err
-	}
-	return nil
 }
 
 // deleteSecret deletes the copied secrets
@@ -65,21 +51,12 @@ func (r *ReconcileSecretShare) deleteSecret(secretName, ns string) error {
 }
 
 // createSecret gets the secret required to be copied
-func (r *ReconcileSecretShare) createUpdateSecret(secret *corev1.Secret) error {
-	existingSecret, err := r.getSecret(secret.Name, secret.Namespace)
-	if err != nil && !errors.IsNotFound(err) {
-		return err
-	} else if errors.IsNotFound(err) {
-		if err := r.createSecret(secret); err != nil {
-			return err
+func (r *ReconcileSecretShare) createUpdateSecret(secret *corev1.Secret, owner ownerutil.Owner) error {
+	_, err := controllerutil.CreateOrUpdate(context.TODO(), r.client, secret, func() error {
+		if owner != nil {
+			ownerutil.EnsureOwner(secret, owner)
 		}
-	} else {
-		existingSecret.Data = secret.Data
-		existingSecret.Type = secret.Type
-		existingSecret.StringData = secret.StringData
-		if err := r.updateSecret(existingSecret); err != nil {
-			return err
-		}
-	}
-	return nil
+		return nil
+	})
+	return err
 }
