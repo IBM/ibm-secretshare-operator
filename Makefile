@@ -33,7 +33,7 @@ NAMESPACE=ibm-common-services
 # IMAGE_REPO, IMAGE_NAME and RELEASE_TAG environment variable.
 IMAGE_REPO ?= quay.io/opencloudio
 IMAGE_NAME ?= ibm-secretshare-operator
-CSV_VERSION ?= 1.2.0
+OPERATOR_VERSION ?= 1.2.0
 
 QUAY_USERNAME ?=
 QUAY_PASSWORD ?=
@@ -72,35 +72,94 @@ endif
 
 include common/Makefile.common.mk
 
-##@ Application
+# Default bundle image tag
+BUNDLE_IMG ?= ibm-secretshare-operator-bundle:$(OPERATOR_VERSION)
+# Options for 'bundle-build'
+ifneq ($(origin CHANNELS), undefined)
+BUNDLE_CHANNELS := --channels=$(CHANNELS)
+endif
+ifneq ($(origin DEFAULT_CHANNEL), undefined)
+BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+endif
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
-install: ## Install all resources (CR/CRD's, RBAC and Operator)
-	@echo ....... Creating namespace .......
-	- $(KUBECTL) create namespace ${NAMESPACE}
-	@echo ....... Applying CRDs .......
-	- $(KUBECTL) apply -f deploy/crds/ibmcpcs.ibm.com_secretshares_crd.yaml
-	@echo ....... Applying RBAC .......
-	- $(KUBECTL) apply -f deploy/service_account.yaml -n ${NAMESPACE}
-	- $(KUBECTL) apply -f deploy/role.yaml
-	- $(KUBECTL) apply -f deploy/role_binding.yaml
-	# @echo ....... Applying Operator .......
-	- $(KUBECTL) apply -f deploy/operator.yaml -n ${NAMESPACE}
-	@echo ....... Creating the Instances .......
-	- $(KUBECTL) apply -f deploy/crds/ibmcpcs.ibm.com_v1_secretshare_cr.yaml -n ${NAMESPACE}
-uninstall: ## Uninstall all that all performed in the $ make install
-	@echo ....... Uninstalling .......
-	@echo ....... Deleting the Instances .......
-	- $(KUBECTL) delete -f deploy/crds/ibmcpcs.ibm.com_v1_secretshare_cr.yaml -n ${NAMESPACE} --ignore-not-found
-	@echo ....... Deleting Operator .......
-	- $(KUBECTL) delete -f deploy/operator.yaml -n ${NAMESPACE} --ignore-not-found
-	@echo ....... Deleting CRDs .......
-	- $(KUBECTL) delete -f deploy/crds/ibmcpcs.ibm.com_secretshares_crd.yaml --ignore-not-found
-	@echo ....... Deleting RBAC .......
-	- $(KUBECTL) delete -f deploy/role_binding.yaml --ignore-not-found
-	- $(KUBECTL) delete -f deploy/service_account.yaml -n ${NAMESPACE} --ignore-not-found
-	- $(KUBECTL) delete -f deploy/role.yaml --ignore-not-found
+# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= "crd:trivialVersions=true"
 
-##@ Development
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+all: manager
+
+# Run tests
+test:
+	@echo no test files
+	# go test ./... -coverprofile cover.out
+
+# Build manager binary
+manager: generate code-fmt code-vet
+	go build -o bin/manager main.go
+
+# Run against the configured Kubernetes cluster in ~/.kube/config
+run: generate code-fmt code-vet manifests
+	go run ./main.go
+
+# Install CRDs into a cluster
+install: manifests kustomize
+	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+# Uninstall CRDs from a cluster
+uninstall: manifests kustomize
+	$(KUSTOMIZE) build config/crd | kubectl delete -f -
+
+# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
+deploy: manifests kustomize
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMAGE_NAME}
+	$(KUSTOMIZE) build config/default | kubectl apply -f -
+
+# Generate manifests e.g. CRD, RBAC etc.
+manifests: controller-gen
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+# Generate code
+generate: controller-gen
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+# find or download controller-gen
+# download controller-gen if necessary
+controller-gen:
+ifeq (, $(shell which controller-gen))
+	@{ \
+	set -e ;\
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONTROLLER_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0 ;\
+	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+CONTROLLER_GEN=$(GOBIN)/controller-gen
+else
+CONTROLLER_GEN=$(shell which controller-gen)
+endif
+
+kustomize:
+ifeq (, $(shell which kustomize))
+	@{ \
+	set -e ;\
+	KUSTOMIZE_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$KUSTOMIZE_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 ;\
+	rm -rf $$KUSTOMIZE_GEN_TMP_DIR ;\
+	}
+KUSTOMIZE=$(GOBIN)/kustomize
+else
+KUSTOMIZE=$(shell which kustomize)
+endif
 
 check: lint-all ## Check all files lint error
 
@@ -114,10 +173,6 @@ code-dev: ## Run the default dev commands which are the go tidy, fmt, vet then e
 	- make test
 	- make build
 
-run: ## Run against the configured Kubernetes cluster in ~/.kube/config
-	@echo ....... Start Operator locally with go run ......
-	WATCH_NAMESPACE= go run ./cmd/manager/main.go -v=2 --zap-encoder=console
-
 ifeq ($(BUILD_LOCALLY),0)
     export CONFIG_DOCKER_TARGET = config-docker
 endif
@@ -126,51 +181,27 @@ endif
 
 build:
 	@echo "Building the $(IMAGE_NAME) binary for $(LOCAL_ARCH)..."
-	@GOARCH=$(LOCAL_ARCH) common/scripts/gobuild.sh build/_output/bin/$(IMAGE_NAME) ./cmd/manager
-	@strip $(STRIP_FLAGS) build/_output/bin/$(IMAGE_NAME)
+	@GOARCH=$(LOCAL_ARCH) common/scripts/gobuild.sh manager main.go
+	@strip $(STRIP_FLAGS) manager
 
 build-push-image: build-image push-image
 
-build-image: build
+build-image:
 	@echo "Building the $(IMAGE_NAME) docker image for $(LOCAL_ARCH)..."
-	@docker build -t $(IMAGE_REPO)/$(IMAGE_NAME)-$(LOCAL_ARCH):$(VERSION) --build-arg VCS_REF=$(VCS_REF) --build-arg VCS_URL=$(VCS_URL) -f build/Dockerfile .
+	@docker build -t $(IMAGE_REPO)/$(IMAGE_NAME)-$(LOCAL_ARCH):$(VERSION) --build-arg VCS_REF=$(VCS_REF) --build-arg VCS_URL=$(VCS_URL) .
 
 push-image: $(CONFIG_DOCKER_TARGET) build-image
 	@echo "Pushing the $(IMAGE_NAME) docker image for $(LOCAL_ARCH)..."
 	@docker push $(IMAGE_REPO)/$(IMAGE_NAME)-$(LOCAL_ARCH):$(VERSION)
-
-##@ Test
-
-test: ## Run unit test
-	@echo "Running the tests for $(IMAGE_NAME) on $(LOCAL_ARCH)..."
-	@go test $(TESTARGS) ./pkg/controller/...
-
-coverage: ## Run code coverage test
-	@common/scripts/codecov.sh ${BUILD_LOCALLY} "pkg/controller"
-
-scorecard: ## Run scorecard test
-	@echo ... Running the scorecard test
-	- $(OPERATOR_SDK) scorecard --verbose
-
-##@ Release
-
 multiarch-image: $(CONFIG_DOCKER_TARGET)
 	@MAX_PULLING_RETRY=20 RETRY_INTERVAL=30 common/scripts/multiarch_image.sh $(IMAGE_REPO) $(IMAGE_NAME) $(VERSION)
 
-csv: ## Push CSV package to the catalog
-	@RELEASE=${CSV_VERSION} common/scripts/push-csv.sh
+# Generate bundle manifests and metadata, then validate generated files.
+bundle: manifests
+	operator-sdk generate kustomize manifests -q
+	kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $(OPERATOR_VERSION) $(BUNDLE_METADATA_OPTS)
+	operator-sdk bundle validate ./bundle
 
-all: check test coverage build images
-
-##@ Cleanup
-clean: ## Clean build binary
-	rm -f build/_output/bin/$(IMAGE_NAME)
-
-##@ Help
-help: ## Display this help
-	@echo "Usage:\n  make \033[36m<target>\033[0m"
-	@awk 'BEGIN {FS = ":.*##"}; \
-		/^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
-		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-
-.PHONY: all build run check install uninstall code-dev test test-e2e coverage build multiarch-image csv clean help
+# Build the bundle image.
+bundle-build:
+	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
