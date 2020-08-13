@@ -90,8 +90,12 @@ func (r *SecretShareReconciler) copySecretConfigmap(instance *ibmcpcsibmcomv1.Se
 }
 
 // copySecret copies secret to the target namespace
-func (r *SecretShareReconciler) copySecret(instance *ibmcpcsibmcomv1.SecretShare) bool {
+func (r *SecretShareReconciler) copySecret(ss *ibmcpcsibmcomv1.SecretShare) bool {
 	klog.V(1).Info("Copy secrets to the target namespace")
+	instance := &ibmcpcsibmcomv1.SecretShare{}
+	if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: ss.Name, Namespace: ss.Namespace}, instance); err != nil {
+		return true
+	}
 	ns := instance.Namespace
 	secretList := instance.Spec.Secretshares
 	requeue := false
@@ -157,8 +161,12 @@ func (r *SecretShareReconciler) copySecret(instance *ibmcpcsibmcomv1.SecretShare
 }
 
 // copyConfigmap copies configmap to the target namespace
-func (r *SecretShareReconciler) copyConfigmap(instance *ibmcpcsibmcomv1.SecretShare) bool {
+func (r *SecretShareReconciler) copyConfigmap(ss *ibmcpcsibmcomv1.SecretShare) bool {
 	klog.V(1).Info("Copy configmaps to the target namespace")
+	instance := &ibmcpcsibmcomv1.SecretShare{}
+	if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: ss.Name, Namespace: ss.Namespace}, instance); err != nil {
+		return true
+	}
 	ns := instance.Namespace
 	cmList := instance.Spec.Configmapshares
 	requeue := false
