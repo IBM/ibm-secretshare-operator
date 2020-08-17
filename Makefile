@@ -48,8 +48,9 @@ MARKDOWN_LINT_WHITELIST=https://quay.io/cnr
 
 TESTARGS_DEFAULT := "-v"
 export TESTARGS ?= $(TESTARGS_DEFAULT)
-VERSION ?= $(shell cat ./version/version.go | grep "Version =" | awk '{ print $$3}' | tr -d '"')
-
+VERSION ?= $(shell git describe --exact-match 2> /dev/null || \
+                git describe --match=$(git rev-parse --short=8 HEAD) --always --dirty --abbrev=8)
+RELEASE_VERSION ?= $(shell cat ./version/version.go | grep "Version =" | awk '{ print $$3}' | tr -d '"')
 LOCAL_OS := $(shell uname)
 ifeq ($(LOCAL_OS),Linux)
     TARGET_OS ?= linux
@@ -199,7 +200,7 @@ push-image: $(CONFIG_DOCKER_TARGET) build-image
 	@echo "Pushing the $(IMAGE_NAME) docker image for $(LOCAL_ARCH)..."
 	@docker push $(REGISTRY)/$(IMAGE_NAME)-$(LOCAL_ARCH):$(VERSION)
 multiarch-image: $(CONFIG_DOCKER_TARGET)
-	@MAX_PULLING_RETRY=20 RETRY_INTERVAL=30 common/scripts/multiarch_image.sh $(REGISTRY) $(IMAGE_NAME) $(VERSION)
+	@MAX_PULLING_RETRY=20 RETRY_INTERVAL=30 common/scripts/multiarch_image.sh $(REGISTRY) $(IMAGE_NAME) $(VERSION) $(RELEASE_VERSION)
 
 # Generate bundle manifests and metadata, then validate generated files.
 bundle: manifests
