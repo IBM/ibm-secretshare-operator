@@ -79,7 +79,7 @@ type SecretConfigmapMembers struct {
 
 	// ConfigmapMembers represnets the current operand status of the set
 	// +optional
-	ConfigmapMembers map[string]MemberPhase `json:"ConfigmapMembers,omitempty"`
+	ConfigmapMembers map[string]MemberPhase `json:"configmapMembers,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -95,17 +95,13 @@ type SecretShare struct {
 }
 
 // InitStatus check the status of a secret/configmap
-func (r *SecretShare) InitStatus() bool {
-	change := false
+func (r *SecretShare) InitStatus() {
 	if r.Status.Members.ConfigmapMembers == nil {
 		r.Status.Members.ConfigmapMembers = map[string]MemberPhase{}
-		change = true
 	}
 	if r.Status.Members.SecretMembers == nil {
 		r.Status.Members.SecretMembers = map[string]MemberPhase{}
-		change = true
 	}
-	return change
 }
 
 // UpdateSecretStatus updates the status of a secret
