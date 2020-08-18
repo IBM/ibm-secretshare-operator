@@ -69,11 +69,7 @@ func (r *SecretShareReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 		return ctrl.Result{}, err
 	}
 
-	if instance.InitStatus() {
-		if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
+	instance.InitStatus()
 
 	if r.copySecretConfigmap(instance) {
 		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
@@ -86,16 +82,15 @@ func (r *SecretShareReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 func (r *SecretShareReconciler) copySecretConfigmap(instance *ibmcpcsibmcomv1.SecretShare) bool {
 	requeueFromSecret := r.copySecret(instance)
 	requeueFromConfigmap := r.copyConfigmap(instance)
+	if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
+		klog.Errorf("Failed to update the status of the secretshare instance %s/%s : %v", instance.Namespace, instance.Name, err)
+	}
 	return requeueFromSecret || requeueFromConfigmap
 }
 
 // copySecret copies secret to the target namespace
-func (r *SecretShareReconciler) copySecret(ss *ibmcpcsibmcomv1.SecretShare) bool {
+func (r *SecretShareReconciler) copySecret(instance *ibmcpcsibmcomv1.SecretShare) bool {
 	klog.V(1).Info("Copy secrets to the target namespace")
-	instance := &ibmcpcsibmcomv1.SecretShare{}
-	if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: ss.Name, Namespace: ss.Namespace}, instance); err != nil {
-		return true
-	}
 	ns := instance.Namespace
 	secretList := instance.Spec.Secretshares
 	requeue := false
@@ -154,19 +149,12 @@ func (r *SecretShareReconciler) copySecret(ss *ibmcpcsibmcomv1.SecretShare) bool
 		}
 		requeue = requeue || !running
 	}
-	if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
-		requeue = true
-	}
 	return requeue
 }
 
 // copyConfigmap copies configmap to the target namespace
-func (r *SecretShareReconciler) copyConfigmap(ss *ibmcpcsibmcomv1.SecretShare) bool {
+func (r *SecretShareReconciler) copyConfigmap(instance *ibmcpcsibmcomv1.SecretShare) bool {
 	klog.V(1).Info("Copy configmaps to the target namespace")
-	instance := &ibmcpcsibmcomv1.SecretShare{}
-	if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: ss.Name, Namespace: ss.Namespace}, instance); err != nil {
-		return true
-	}
 	ns := instance.Namespace
 	cmList := instance.Spec.Configmapshares
 	requeue := false
@@ -224,9 +212,6 @@ func (r *SecretShareReconciler) copyConfigmap(ss *ibmcpcsibmcomv1.SecretShare) b
 			}
 		}
 		requeue = requeue || !running
-	}
-	if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
-		requeue = true
 	}
 	return requeue
 }
