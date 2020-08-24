@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // getCm gets the configmap required to be copied
@@ -52,11 +51,23 @@ func (r *SecretShareReconciler) deleteCm(cmName, ns string) error {
 
 // createUpdateCm gets the Configmap required to be copied
 func (r *SecretShareReconciler) createUpdateCm(cm *corev1.ConfigMap, owner ownerutil.Owner) error {
-	_, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, cm, func() error {
+	existingCm, err := r.getCm(cm.Name, cm.Namespace)
+	if existingCm != nil {
 		if owner != nil {
 			ownerutil.EnsureOwner(cm, owner)
 		}
-		return nil
-	})
-	return err
+		if err := r.Client.Update(context.TODO(), cm); err != nil {
+			return err
+		}
+	} else if errors.IsNotFound(err) {
+		if owner != nil {
+			ownerutil.EnsureOwner(cm, owner)
+		}
+		if err := r.Client.Create(context.TODO(), cm); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+	return nil
 }

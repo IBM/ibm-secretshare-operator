@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // getSecret gets the secret required to be copied
@@ -52,11 +51,23 @@ func (r *SecretShareReconciler) deleteSecret(secretName, ns string) error {
 
 // createSecret gets the secret required to be copied
 func (r *SecretShareReconciler) createUpdateSecret(secret *corev1.Secret, owner ownerutil.Owner) error {
-	_, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, secret, func() error {
+	existingSecret, err := r.getSecret(secret.Name, secret.Namespace)
+	if existingSecret != nil {
 		if owner != nil {
 			ownerutil.EnsureOwner(secret, owner)
 		}
-		return nil
-	})
-	return err
+		if err := r.Client.Update(context.TODO(), secret); err != nil {
+			return err
+		}
+	} else if errors.IsNotFound(err) {
+		if owner != nil {
+			ownerutil.EnsureOwner(secret, owner)
+		}
+		if err := r.Client.Create(context.TODO(), secret); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+	return nil
 }
