@@ -41,7 +41,7 @@ LABEL org.label-schema.vendor="IBM" \
 WORKDIR /
 COPY --from=builder /workspace/manager .
 
-# copy licenses
+# Copy licenses
 RUN mkdir /licenses
 COPY LICENSE /licenses
 

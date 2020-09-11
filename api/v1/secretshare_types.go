@@ -113,7 +113,7 @@ func (r *SecretShare) UpdateSecretStatus(namespacedName string, status MemberPha
 	return true
 }
 
-// CheckSecretStatus check the status of a secret
+// CheckSecretStatus checks the status of a secret
 func (r *SecretShare) CheckSecretStatus(namespacedName string, status MemberPhase) bool {
 	if len(r.Status.Members.SecretMembers) == 0 {
 		return false
@@ -138,7 +138,7 @@ func (r *SecretShare) UpdateConfigmapStatus(namespacedName string, status Member
 	return true
 }
 
-// CheckConfigmapStatus check the status of a configmap
+// CheckConfigmapStatus checks the status of a configmap
 func (r *SecretShare) CheckConfigmapStatus(namespacedName string, status MemberPhase) bool {
 	if len(r.Status.Members.ConfigmapMembers) == 0 {
 		return false

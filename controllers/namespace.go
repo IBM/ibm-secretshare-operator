@@ -46,7 +46,7 @@ func (r *SecretShareReconciler) getNs(ns string) error {
 	return nil
 }
 
-// createNs create the target namespace
+// createNs creates the target namespace
 func (r *SecretShareReconciler) createNs(ns string) error {
 	targetNs := &corev1.Namespace{}
 	targetNs.SetName(ns)
