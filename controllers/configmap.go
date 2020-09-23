@@ -19,11 +19,12 @@ package controllers
 import (
 	"context"
 
-	"github.com/operator-framework/operator-lifecycle-manager/pkg/lib/ownerutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	ibmcpcsibmcomv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
 )
 
 // getCm gets the configmap required to be copied
@@ -49,20 +50,31 @@ func (r *SecretShareReconciler) deleteCm(cmName, ns string) error {
 	return nil
 }
 
+// addLabelstoConfigmap adds the secretshare labels for watching
+func (r *SecretShareReconciler) addLabelstoConfigmap(cm *corev1.ConfigMap, ss *ibmcpcsibmcomv1.SecretShare) error {
+	existingCm, err := r.getCm(cm.Name, cm.Namespace)
+	if err != nil {
+		return err
+	}
+	if existingCm.Labels == nil {
+		existingCm.Labels = make(map[string]string)
+	}
+	existingCm.Labels["secretshareName"] = ss.Name
+	existingCm.Labels["secretshareNamespace"] = ss.Namespace
+	if err := r.Client.Update(context.TODO(), existingCm); err != nil {
+		return err
+	}
+	return nil
+}
+
 // createUpdateCm gets the Configmap required to be copied
-func (r *SecretShareReconciler) createUpdateCm(cm *corev1.ConfigMap, owner ownerutil.Owner) error {
+func (r *SecretShareReconciler) createUpdateCm(cm *corev1.ConfigMap) error {
 	existingCm, err := r.getCm(cm.Name, cm.Namespace)
 	if existingCm != nil {
-		if owner != nil {
-			ownerutil.EnsureOwner(cm, owner)
-		}
 		if err := r.Client.Update(context.TODO(), cm); err != nil {
 			return err
 		}
 	} else if errors.IsNotFound(err) {
-		if owner != nil {
-			ownerutil.EnsureOwner(cm, owner)
-		}
 		if err := r.Client.Create(context.TODO(), cm); err != nil {
 			return err
 		}

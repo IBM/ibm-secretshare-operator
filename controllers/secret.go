@@ -19,11 +19,12 @@ package controllers
 import (
 	"context"
 
-	"github.com/operator-framework/operator-lifecycle-manager/pkg/lib/ownerutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	ibmcpcsibmcomv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
 )
 
 // getSecret gets the secret required to be copied
@@ -49,20 +50,31 @@ func (r *SecretShareReconciler) deleteSecret(secretName, ns string) error {
 	return nil
 }
 
+// addLabelstoSecret adds the secretshare labels for watching
+func (r *SecretShareReconciler) addLabelstoSecret(secret *corev1.Secret, ss *ibmcpcsibmcomv1.SecretShare) error {
+	existingSecret, err := r.getSecret(secret.Name, secret.Namespace)
+	if err != nil {
+		return err
+	}
+	if existingSecret.Labels == nil {
+		existingSecret.Labels = make(map[string]string)
+	}
+	existingSecret.Labels["secretshareName"] = ss.Name
+	existingSecret.Labels["secretshareNamespace"] = ss.Namespace
+	if err := r.Client.Update(context.TODO(), existingSecret); err != nil {
+		return err
+	}
+	return nil
+}
+
 // createSecret gets the secret required to be copied
-func (r *SecretShareReconciler) createUpdateSecret(secret *corev1.Secret, owner ownerutil.Owner) error {
+func (r *SecretShareReconciler) createUpdateSecret(secret *corev1.Secret) error {
 	existingSecret, err := r.getSecret(secret.Name, secret.Namespace)
 	if existingSecret != nil {
-		if owner != nil {
-			ownerutil.EnsureOwner(secret, owner)
-		}
 		if err := r.Client.Update(context.TODO(), secret); err != nil {
 			return err
 		}
 	} else if errors.IsNotFound(err) {
-		if owner != nil {
-			ownerutil.EnsureOwner(secret, owner)
-		}
 		if err := r.Client.Create(context.TODO(), secret); err != nil {
 			return err
 		}

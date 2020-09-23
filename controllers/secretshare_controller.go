@@ -122,8 +122,8 @@ func (r *SecretShareReconciler) copySecret(instance *ibmcpcsibmcomv1.SecretShare
 				}
 			}
 		} else {
-			// Set SecretShare instance as the owner
-			if err := r.createUpdateSecret(secret, instance); err != nil {
+			// Add labels for SecretShare instance
+			if err := r.addLabelstoSecret(secret, instance); err != nil {
 				klog.Error(err)
 				instance.UpdateSecretStatus(secret.Namespace+"/"+secret.Name, ibmcpcsibmcomv1.Failed)
 				requeue = true
@@ -186,8 +186,8 @@ func (r *SecretShareReconciler) copyConfigmap(instance *ibmcpcsibmcomv1.SecretSh
 				}
 			}
 		} else {
-			// Set SecretShare instance as the owner
-			if err := r.createUpdateCm(cm, instance); err != nil {
+			// Add labels for SecretShare instance
+			if err := r.addLabelstoConfigmap(cm, instance); err != nil {
 				klog.Error(err)
 				instance.UpdateConfigmapStatus(cm.Namespace+"/"+cm.Name, ibmcpcsibmcomv1.Failed)
 				requeue = true
@@ -234,7 +234,7 @@ func (r *SecretShareReconciler) copySecretToTargetNs(secret *corev1.Secret, targ
 		Data:       secret.Data,
 		StringData: secret.StringData,
 	}
-	if err := r.createUpdateSecret(targetSecret, nil); err != nil {
+	if err := r.createUpdateSecret(targetSecret); err != nil {
 		return err
 	}
 	return nil
@@ -257,7 +257,7 @@ func (r *SecretShareReconciler) copyConfigmapToTargetNs(cm *corev1.ConfigMap, ta
 		Data:       cm.Data,
 		BinaryData: cm.BinaryData,
 	}
-	if err := r.createUpdateCm(targetCm, nil); err != nil {
+	if err := r.createUpdateCm(targetCm); err != nil {
 		return err
 	}
 	return nil
@@ -287,10 +287,25 @@ func (r *SecretShareReconciler) deleteCopiedCm(cmName string, cmShare ibmcpcsibm
 	return requeue
 }
 
+func getCMSecretToSS() handler.ToRequestsFunc {
+	return func(object handler.MapObject) []reconcile.Request {
+		secretshare := []reconcile.Request{}
+		lables := object.Meta.GetLabels()
+		name, nameOk := lables["secretshareName"]
+		ns, namespaceOK := lables["secretshareNamespace"]
+		if nameOk && namespaceOK {
+			secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}})
+		}
+		return secretshare
+	}
+}
+
 func getSecretShareMapper() handler.ToRequestsFunc {
 	return func(object handler.MapObject) []reconcile.Request {
 		secretshare := []reconcile.Request{}
-		secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: "common-services", Namespace: "ibm-common-services"}})
+		if object.Meta.GetNamespace() == "ibm-common-services" {
+			secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: "common-services", Namespace: "ibm-common-services"}})
+		}
 		return secretshare
 	}
 }
@@ -305,15 +320,28 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return true
 		},
 	}
+	cmsecretPredicates := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ibmcpcsibmcomv1.SecretShare{}).
 		Watches(
 			&source.Kind{Type: &corev1.ConfigMap{}},
-			&handler.EnqueueRequestForOwner{IsController: false, OwnerType: &ibmcpcsibmcomv1.SecretShare{}},
+			&handler.EnqueueRequestsFromMapFunc{ToRequests: getCMSecretToSS()},
+			builder.WithPredicates(cmsecretPredicates),
 		).
 		Watches(
 			&source.Kind{Type: &corev1.Secret{}},
-			&handler.EnqueueRequestForOwner{IsController: false, OwnerType: &ibmcpcsibmcomv1.SecretShare{}},
+			&handler.EnqueueRequestsFromMapFunc{ToRequests: getCMSecretToSS()},
+			builder.WithPredicates(cmsecretPredicates),
 		).
 		Watches(
 			&source.Kind{Type: &olmv1alpha1.Subscription{}},
