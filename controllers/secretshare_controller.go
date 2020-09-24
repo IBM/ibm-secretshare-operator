@@ -42,6 +42,7 @@ import (
 // SecretShareReconciler reconciles a SecretShare object
 type SecretShareReconciler struct {
 	client.Client
+	client.Reader
 	Scheme *runtime.Scheme
 }
 
@@ -75,7 +76,7 @@ func (r *SecretShareReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: time.Minute * 1}, nil
 }
 
 // copySecretConfigmap copies secret and configmap to the target namespace
@@ -287,19 +288,6 @@ func (r *SecretShareReconciler) deleteCopiedCm(cmName string, cmShare ibmcpcsibm
 	return requeue
 }
 
-func getCMSecretToSS() handler.ToRequestsFunc {
-	return func(object handler.MapObject) []reconcile.Request {
-		secretshare := []reconcile.Request{}
-		lables := object.Meta.GetLabels()
-		name, nameOk := lables["secretshareName"]
-		ns, namespaceOK := lables["secretshareNamespace"]
-		if nameOk && namespaceOK {
-			secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}})
-		}
-		return secretshare
-	}
-}
-
 func getSecretShareMapper() handler.ToRequestsFunc {
 	return func(object handler.MapObject) []reconcile.Request {
 		secretshare := []reconcile.Request{}
@@ -314,35 +302,15 @@ func getSecretShareMapper() handler.ToRequestsFunc {
 func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	subPredicates := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			return true
+			return e.Meta.GetNamespace() != "ibm-common-services"
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return true
+			return e.Meta.GetNamespace() != "ibm-common-services"
 		},
 	}
-	cmsecretPredicates := predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			return true
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			return true
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			return true
-		},
-	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ibmcpcsibmcomv1.SecretShare{}).
-		Watches(
-			&source.Kind{Type: &corev1.ConfigMap{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: getCMSecretToSS()},
-			builder.WithPredicates(cmsecretPredicates),
-		).
-		Watches(
-			&source.Kind{Type: &corev1.Secret{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: getCMSecretToSS()},
-			builder.WithPredicates(cmsecretPredicates),
-		).
 		Watches(
 			&source.Kind{Type: &olmv1alpha1.Subscription{}},
 			&handler.EnqueueRequestsFromMapFunc{ToRequests: getSecretShareMapper()},
