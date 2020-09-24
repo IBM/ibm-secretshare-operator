@@ -30,7 +30,7 @@ import (
 // getSecret gets the secret required to be copied
 func (r *SecretShareReconciler) getSecret(name, ns string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
-	if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: ns}, secret); err != nil {
+	if err := r.Reader.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: ns}, secret); err != nil {
 		return nil, err
 	}
 	return secret, nil

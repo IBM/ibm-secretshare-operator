@@ -30,7 +30,7 @@ import (
 // getCm gets the configmap required to be copied
 func (r *SecretShareReconciler) getCm(name, ns string) (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}
-	if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: ns}, cm); err != nil {
+	if err := r.Reader.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: ns}, cm); err != nil {
 		return nil, err
 	}
 	return cm, nil
