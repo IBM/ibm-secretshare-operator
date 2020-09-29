@@ -21,15 +21,19 @@ import (
 	"os"
 
 	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	ibmcpcsibmcomv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
 	"github.com/IBM/ibm-secretshare-operator/controllers"
+	"github.com/IBM/ibm-secretshare-operator/controllers/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -63,6 +67,12 @@ func main() {
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "2e672f4a.ibm.com",
+		NewCache: func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+			return utils.New(config, opts, func(options *metav1.ListOptions) {
+				selectorString := "secretshareName"
+				options.LabelSelector = selectorString
+			})
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -71,7 +81,6 @@ func main() {
 
 	if err = (&controllers.SecretShareReconciler{
 		Client: mgr.GetClient(),
-		Reader: mgr.GetAPIReader(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SecretShare")

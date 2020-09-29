@@ -27,7 +27,7 @@ import (
 // checkSub gets the subscription
 func (r *SecretShareReconciler) checkSub(name, namespace string) bool {
 	sub := &olmv1alpha1.Subscription{}
-	if err := r.Reader.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, sub); err != nil {
+	if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, sub); err != nil {
 		klog.Error(err)
 		return false
 	}
