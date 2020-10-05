@@ -21,7 +21,6 @@ import (
 	"os"
 
 	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -68,10 +67,7 @@ func main() {
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "2e672f4a.ibm.com",
 		NewCache: func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
-			return utils.New(config, opts, func(options *metav1.ListOptions) {
-				selectorString := "secretshareName"
-				options.LabelSelector = selectorString
-			})
+			return utils.New(config, opts)
 		},
 	})
 	if err != nil {

@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -48,7 +47,7 @@ var cmSchema = corev1.SchemeGroupVersion.WithKind("ConfigMap")
 var cmListSchema = corev1.SchemeGroupVersion.WithKind("ConfigMapList")
 
 // New constructs a new Cache with custom logic to handle secrets
-func New(config *rest.Config, opts cr_cache.Options, optionsModifier func(options *metav1.ListOptions)) (cr_cache.Cache, error) {
+func New(config *rest.Config, opts cr_cache.Options) (cr_cache.Cache, error) {
 	// Setup filtered secret informer that will only store/return items matching the filter for listing purposes
 	clientSet, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -59,37 +58,14 @@ func New(config *rest.Config, opts cr_cache.Options, optionsModifier func(option
 	if opts.Resync != nil {
 		resync = *opts.Resync
 	}
-	secretlistFunc := func(options metav1.ListOptions) (runtime.Object, error) {
-		optionsModifier(&options)
-		result, err := clientSet.CoreV1().Secrets(opts.Namespace).List(context.TODO(), options)
-		if err != nil {
-			klog.Info("Failed to list secrets", "error", err)
-		}
-		return result, err
-	}
-	secretwatchFunc := func(options metav1.ListOptions) (watch.Interface, error) {
-		options.Watch = true
-		optionsModifier(&options)
-		return clientSet.CoreV1().Secrets(opts.Namespace).Watch(context.TODO(), options)
-	}
-
-	secretlisterWatcher := &cache.ListWatch{ListFunc: secretlistFunc, WatchFunc: secretwatchFunc}
+	secretlisterWatcher := cache.NewFilteredListWatchFromClient(clientSet.CoreV1().RESTClient(), "secrets", opts.Namespace, func(options *metav1.ListOptions) {
+		options.LabelSelector = "secretshareName"
+	})
 	secretInformer := cache.NewSharedIndexInformer(secretlisterWatcher, &corev1.Secret{}, resync, cache.Indexers{})
 
-	cmlistFunc := func(options metav1.ListOptions) (runtime.Object, error) {
-		optionsModifier(&options)
-		result, err := clientSet.CoreV1().ConfigMaps(opts.Namespace).List(context.TODO(), options)
-		if err != nil {
-			klog.Info("Failed to list configmaps", "error", err)
-		}
-		return result, err
-	}
-	cmwatchFunc := func(options metav1.ListOptions) (watch.Interface, error) {
-		options.Watch = true
-		optionsModifier(&options)
-		return clientSet.CoreV1().ConfigMaps(opts.Namespace).Watch(context.TODO(), options)
-	}
-	cmlisterWatcher := &cache.ListWatch{ListFunc: cmlistFunc, WatchFunc: cmwatchFunc}
+	cmlisterWatcher := cache.NewFilteredListWatchFromClient(clientSet.CoreV1().RESTClient(), "configmaps", opts.Namespace, func(options *metav1.ListOptions) {
+		options.LabelSelector = "secretshareName"
+	})
 	cmInformer := cache.NewSharedIndexInformer(cmlisterWatcher, &corev1.ConfigMap{}, resync, cache.Indexers{})
 	// Setup regular cache to handle other resource kinds
 	fallback, err := cr_cache.New(config, opts)
@@ -110,10 +86,11 @@ type customCache struct {
 func (cc customCache) Get(ctx context.Context, key cr_client.ObjectKey, obj runtime.Object) error {
 	if secret, ok := obj.(*corev1.Secret); ok {
 		// Check store, then real client
-		if err := cc.getSecretFromStore(key, secret); err == nil {
-			// Do nothing
-		} else if err := cc.getSecretFromClient(ctx, key, secret); err != nil {
-			return err
+		if err := cc.getSecretFromStore(key, secret); err != nil {
+			if err := cc.getSecretFromClient(ctx, key, secret); err != nil {
+				klog.Error(err)
+				return err
+			}
 		}
 		secret.SetGroupVersionKind(secretSchema)
 		return nil
