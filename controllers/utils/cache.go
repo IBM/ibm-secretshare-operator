@@ -28,11 +28,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -40,7 +39,6 @@ import (
 	cr_cache "sigs.k8s.io/controller-runtime/pkg/cache"
 	cr_client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // ErrUnsupported is returned for unsupported operations
@@ -53,18 +51,16 @@ func NewCacheBuilder(namespace string, label string, globalGvks ...schema.GroupV
 	return func(config *rest.Config, opts cr_cache.Options) (cr_cache.Cache, error) {
 		// Setup filtered informer that will only store/return items matching the filter for listing purposes
 		clientSet, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return nil, err
+		}
 
 		var resync time.Duration
 		if opts.Resync != nil {
 			resync = *opts.Resync
 		}
 
-		informerMap, err := buildInformerMap(clientSet, opts, label, resync, globalGvks...)
-
-		if err != nil {
-			klog.Error(err, "Failed to build informer")
-			return nil, err
-		}
+		informerMap := buildInformerMap(clientSet, opts, label, resync, globalGvks...)
 
 		fallback, err := cr_cache.New(config, opts)
 		if err != nil {
@@ -75,7 +71,7 @@ func NewCacheBuilder(namespace string, label string, globalGvks ...schema.GroupV
 	}
 }
 
-func buildInformerMap(clientSet *kubernetes.Clientset, opts cr_cache.Options, label string, resync time.Duration, gvks ...schema.GroupVersionKind) (map[schema.GroupVersionKind]cache.SharedIndexInformer, error) {
+func buildInformerMap(clientSet *kubernetes.Clientset, opts cr_cache.Options, label string, resync time.Duration, gvks ...schema.GroupVersionKind) map[schema.GroupVersionKind]cache.SharedIndexInformer {
 	informerMap := make(map[schema.GroupVersionKind]cache.SharedIndexInformer)
 	for _, gvk := range gvks {
 		plural := strings.ToLower(flect.Pluralize(gvk.Kind))
@@ -92,7 +88,7 @@ func buildInformerMap(clientSet *kubernetes.Clientset, opts cr_cache.Options, la
 		gvkList := schema.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind + "List"}
 		informerMap[gvkList] = informer
 	}
-	return informerMap, nil
+	return informerMap
 }
 
 type customCache struct {
@@ -123,6 +119,9 @@ func (cc customCache) Get(ctx context.Context, key cr_client.ObjectKey, obj runt
 
 func (cc customCache) getFromStore(informer cache.SharedIndexInformer, key cr_client.ObjectKey, obj runtime.Object) error {
 	gvk, err := apiutil.GVKForObject(obj, cc.Scheme)
+	if err != nil {
+		return err
+	}
 
 	var keyString string
 	if key.Namespace == "" {
@@ -162,6 +161,10 @@ func (cc customCache) getFromStore(informer cache.SharedIndexInformer, key cr_cl
 func (cc customCache) getFromClient(ctx context.Context, key cr_client.ObjectKey, obj runtime.Object) error {
 
 	gvk, err := apiutil.GVKForObject(obj, cc.Scheme)
+	if err != nil {
+		return err
+	}
+
 	resource := kindToResource(gvk.Kind)
 	result, err := cc.clientSet.CoreV1().RESTClient().
 		Get().
@@ -189,7 +192,6 @@ func (cc customCache) getFromClient(ctx context.Context, key cr_client.ObjectKey
 	reflect.Indirect(objVal).Set(reflect.Indirect(itemVal))
 	obj.GetObjectKind().SetGroupVersionKind(gvk)
 
-	obj = result.DeepCopyObject()
 	return nil
 }
 
@@ -238,7 +240,9 @@ func (cc customCache) List(ctx context.Context, list runtime.Object, opts ...cr_
 			outObj.GetObjectKind().SetGroupVersionKind(gvk)
 			runtimeObjList = append(runtimeObjList, outObj)
 		}
-		apimeta.SetList(list, runtimeObjList)
+		if err := apimeta.SetList(list, runtimeObjList); err != nil {
+			return err
+		}
 	}
 
 	// Passthrough
@@ -309,17 +313,4 @@ func (cc customCache) IndexField(ctx context.Context, obj runtime.Object, field 
 
 func kindToResource(kind string) string {
 	return strings.ToLower(flect.Pluralize(kind))
-}
-
-// requiresExactMatch checks if the given field selector is of the form `k=v` or `k==v`.
-func requiresExactMatch(sel fields.Selector) (field, val string, required bool) {
-	reqs := sel.Requirements()
-	if len(reqs) != 1 {
-		return "", "", false
-	}
-	req := reqs[0]
-	if req.Operator != selection.Equals && req.Operator != selection.DoubleEquals {
-		return "", "", false
-	}
-	return req.Field, req.Value, true
 }
