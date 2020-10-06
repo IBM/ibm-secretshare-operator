@@ -21,13 +21,13 @@ import (
 	"os"
 
 	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	ibmcpcsibmcomv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
@@ -60,15 +60,17 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	globalGvks := []schema.GroupVersionKind{
+		corev1.SchemeGroupVersion.WithKind("Secret"),
+		corev1.SchemeGroupVersion.WithKind("ConfigMap"),
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "2e672f4a.ibm.com",
-		NewCache: func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
-			return utils.New(config, opts)
-		},
+		NewCache:           utils.NewCacheBuilder("", "secretshareName", globalGvks...),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

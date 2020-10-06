@@ -19,20 +19,28 @@ package utils
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	"github.com/gobuffalo/flect"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	cr_cache "sigs.k8s.io/controller-runtime/pkg/cache"
 	cr_client "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // ErrUnsupported is returned for unsupported operations
@@ -41,122 +49,129 @@ var ErrUnsupported = errors.New("unsupported operation")
 // ErrInternalError is returned for unexpected errors
 var ErrInternalError = errors.New("internal error")
 
-var secretSchema = corev1.SchemeGroupVersion.WithKind("Secret")
-var secretListSchema = corev1.SchemeGroupVersion.WithKind("SecretList")
-var cmSchema = corev1.SchemeGroupVersion.WithKind("ConfigMap")
-var cmListSchema = corev1.SchemeGroupVersion.WithKind("ConfigMapList")
+func NewCacheBuilder(namespace string, label string, globalGvks ...schema.GroupVersionKind) cr_cache.NewCacheFunc {
+	return func(config *rest.Config, opts cr_cache.Options) (cr_cache.Cache, error) {
+		// Setup filtered informer that will only store/return items matching the filter for listing purposes
+		clientSet, err := kubernetes.NewForConfig(config)
 
-// New constructs a new Cache with custom logic to handle secrets
-func New(config *rest.Config, opts cr_cache.Options) (cr_cache.Cache, error) {
-	// Setup filtered secret informer that will only store/return items matching the filter for listing purposes
-	clientSet, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		klog.Error(err, "Failed to construct client")
-		return nil, err
-	}
-	var resync time.Duration
-	if opts.Resync != nil {
-		resync = *opts.Resync
-	}
-	secretlisterWatcher := cache.NewFilteredListWatchFromClient(clientSet.CoreV1().RESTClient(), "secrets", opts.Namespace, func(options *metav1.ListOptions) {
-		options.LabelSelector = "secretshareName"
-	})
-	secretInformer := cache.NewSharedIndexInformer(secretlisterWatcher, &corev1.Secret{}, resync, cache.Indexers{})
+		var resync time.Duration
+		if opts.Resync != nil {
+			resync = *opts.Resync
+		}
 
-	cmlisterWatcher := cache.NewFilteredListWatchFromClient(clientSet.CoreV1().RESTClient(), "configmaps", opts.Namespace, func(options *metav1.ListOptions) {
-		options.LabelSelector = "secretshareName"
-	})
-	cmInformer := cache.NewSharedIndexInformer(cmlisterWatcher, &corev1.ConfigMap{}, resync, cache.Indexers{})
-	// Setup regular cache to handle other resource kinds
-	fallback, err := cr_cache.New(config, opts)
-	if err != nil {
-		klog.Error(err, "Failed to init fallback cache")
-		return nil, err
+		informerMap, err := buildInformerMap(clientSet, opts, label, resync, globalGvks...)
+
+		if err != nil {
+			klog.Error(err, "Failed to build informer")
+			return nil, err
+		}
+
+		fallback, err := cr_cache.New(config, opts)
+		if err != nil {
+			klog.Error(err, "Failed to init fallback cache")
+			return nil, err
+		}
+		return customCache{clientSet: clientSet, informerMap: informerMap, fallback: fallback, Scheme: opts.Scheme}, nil
 	}
-	return customCache{clientSet: clientSet, secretInformer: secretInformer, cmInformer: cmInformer, fallback: fallback}, nil
+}
+
+func buildInformerMap(clientSet *kubernetes.Clientset, opts cr_cache.Options, label string, resync time.Duration, gvks ...schema.GroupVersionKind) (map[schema.GroupVersionKind]cache.SharedIndexInformer, error) {
+	informerMap := make(map[schema.GroupVersionKind]cache.SharedIndexInformer)
+	for _, gvk := range gvks {
+		plural := strings.ToLower(flect.Pluralize(gvk.Kind))
+		listerWatcher := cache.NewFilteredListWatchFromClient(clientSet.CoreV1().RESTClient(), plural, opts.Namespace, func(options *metav1.ListOptions) {
+			options.LabelSelector = label
+		})
+
+		objType := &unstructured.Unstructured{}
+		objType.GetObjectKind().SetGroupVersionKind(gvk)
+
+		informer := cache.NewSharedIndexInformer(listerWatcher, objType, resync, cache.Indexers{})
+
+		informerMap[gvk] = informer
+		gvkList := schema.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind + "List"}
+		informerMap[gvkList] = informer
+	}
+	return informerMap, nil
 }
 
 type customCache struct {
-	clientSet      *kubernetes.Clientset
-	secretInformer cache.SharedIndexInformer
-	cmInformer     cache.SharedIndexInformer
-	fallback       cr_cache.Cache
+	clientSet   *kubernetes.Clientset
+	informerMap map[schema.GroupVersionKind]cache.SharedIndexInformer
+	fallback    cr_cache.Cache
+	Scheme      *runtime.Scheme
 }
 
 func (cc customCache) Get(ctx context.Context, key cr_client.ObjectKey, obj runtime.Object) error {
-	if secret, ok := obj.(*corev1.Secret); ok {
-		// Check store, then real client
-		if err := cc.getSecretFromStore(key, secret); err != nil {
-			if err := cc.getSecretFromClient(ctx, key, secret); err != nil {
-				klog.Error(err)
-				return err
-			}
-		}
-		secret.SetGroupVersionKind(secretSchema)
-		return nil
+	gvk, err := apiutil.GVKForObject(obj, cc.Scheme)
+	if err != nil {
+		klog.Error(err)
+		return err
 	}
-	if _, ok := obj.(*corev1.SecretList); ok {
-		klog.Info("Get with SecretList object unsupported")
-		return ErrUnsupported
-	}
-	if cm, ok := obj.(*corev1.ConfigMap); ok {
-		// Check store, then real client
-		if err := cc.getConfigMapFromStore(key, cm); err == nil {
-			// Do nothing
-		} else if err := cc.getConfigMapFromClient(ctx, key, cm); err != nil {
+	if informer, ok := cc.informerMap[gvk]; ok {
+		if err := cc.getFromStore(informer, key, obj); err == nil {
+		} else if err := cc.getFromClient(ctx, key, obj); err != nil {
+			klog.Error(err)
 			return err
 		}
-		cm.SetGroupVersionKind(cmSchema)
 		return nil
 	}
-	if _, ok := obj.(*corev1.ConfigMapList); ok {
-		klog.Info("Get with ConfigMapList object unsupported")
-		return ErrUnsupported
-	}
+
 	// Passthrough
 	return cc.fallback.Get(ctx, key, obj)
 }
 
-func (cc customCache) getSecretFromStore(key cr_client.ObjectKey, obj *corev1.Secret) error {
-	item, exists, err := cc.secretInformer.GetStore().GetByKey(key.String())
+func (cc customCache) getFromStore(informer cache.SharedIndexInformer, key cr_client.ObjectKey, obj runtime.Object) error {
+	gvk, err := apiutil.GVKForObject(obj, cc.Scheme)
+
+	var keyString string
+	if key.Namespace == "" {
+		keyString = key.Name
+	} else {
+		keyString = key.Namespace + "/" + key.Name
+	}
+	item, exists, err := informer.GetStore().GetByKey(keyString)
 	if err != nil {
 		klog.Info("Failed to get item from cache", "error", err)
 		return ErrInternalError
 	}
 	if !exists {
-		return apierrors.NewNotFound(schema.GroupResource{Group: secretSchema.Group, Resource: "secrets"}, key.String())
+		return apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, key.String())
 	}
-	result, ok := item.(*corev1.Secret)
-	if !ok {
-		klog.Info("Failed to convert secret", "item", result)
-		return ErrInternalError
+	if _, isObj := item.(runtime.Object); !isObj {
+		// This should never happen
+		return fmt.Errorf("cache contained %T, which is not an Object", item)
 	}
 
-	result.DeepCopyInto(obj)
+	// deep copy to avoid mutating cache
+	item = item.(runtime.Object).DeepCopyObject()
+
+	// Copy the value of the item in the cache to the returned value
+	objVal := reflect.ValueOf(obj)
+	itemVal := reflect.ValueOf(item)
+
+	if !objVal.Type().AssignableTo(objVal.Type()) {
+		return fmt.Errorf("cache had type %s, but %s was asked for", itemVal.Type(), objVal.Type())
+	}
+	reflect.Indirect(objVal).Set(reflect.Indirect(itemVal))
+	obj.GetObjectKind().SetGroupVersionKind(gvk)
+
 	return nil
 }
 
-func (cc customCache) getConfigMapFromStore(key cr_client.ObjectKey, obj *corev1.ConfigMap) error {
-	item, exists, err := cc.cmInformer.GetStore().GetByKey(key.String())
-	if err != nil {
-		klog.Info("Failed to get item from cache", "error", err)
-		return ErrInternalError
-	}
-	if !exists {
-		return apierrors.NewNotFound(schema.GroupResource{Group: cmSchema.Group, Resource: "configmaps"}, key.String())
-	}
-	result, ok := item.(*corev1.ConfigMap)
-	if !ok {
-		klog.Info("Failed to convert configmap", "item", result)
-		return ErrInternalError
-	}
-	result.DeepCopyInto(obj)
-	return nil
-}
+func (cc customCache) getFromClient(ctx context.Context, key cr_client.ObjectKey, obj runtime.Object) error {
 
-func (cc customCache) getSecretFromClient(ctx context.Context, key cr_client.ObjectKey, obj *corev1.Secret) error {
+	gvk, err := apiutil.GVKForObject(obj, cc.Scheme)
+	resource := kindToResource(gvk.Kind)
+	result, err := cc.clientSet.CoreV1().RESTClient().
+		Get().
+		Namespace(key.Namespace).
+		Name(key.Name).
+		Resource(resource).
+		VersionedParams(&metav1.GetOptions{}, metav1.ParameterCodec).
+		Do(ctx).
+		Get()
 
-	result, err := cc.clientSet.CoreV1().Secrets(key.Namespace).Get(ctx, key.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return err
 	} else if err != nil {
@@ -164,144 +179,88 @@ func (cc customCache) getSecretFromClient(ctx context.Context, key cr_client.Obj
 		return err
 	}
 
-	result.DeepCopyInto(obj)
-	return nil
-}
+	// Copy the value of the item in the cache to the returned value
+	objVal := reflect.ValueOf(obj)
+	itemVal := reflect.ValueOf(result)
 
-func (cc customCache) getConfigMapFromClient(ctx context.Context, key cr_client.ObjectKey, obj *corev1.ConfigMap) error {
-
-	result, err := cc.clientSet.CoreV1().ConfigMaps(key.Namespace).Get(ctx, key.Name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return err
-	} else if err != nil {
-		klog.Info("Failed to retrieve configmap", "error", err)
-		return err
+	if !objVal.Type().AssignableTo(objVal.Type()) {
+		return fmt.Errorf("cache had type %s, but %s was asked for", itemVal.Type(), objVal.Type())
 	}
-	result.DeepCopyInto(obj)
+	reflect.Indirect(objVal).Set(reflect.Indirect(itemVal))
+	obj.GetObjectKind().SetGroupVersionKind(gvk)
+
+	obj = result.DeepCopyObject()
 	return nil
 }
 
+// List lists items out of the indexer and writes them to list
 func (cc customCache) List(ctx context.Context, list runtime.Object, opts ...cr_client.ListOption) error {
-	if _, ok := list.(*corev1.Secret); ok {
-		klog.Info("List with Secret object unsupported")
-		return ErrUnsupported
+	gvk, err := apiutil.GVKForObject(list, cc.Scheme)
+	if err != nil {
+		return err
 	}
-	if secretList, ok := list.(*corev1.SecretList); ok {
+	if informer, ok := cc.informerMap[gvk]; ok {
 		// Construct filter
+		var objList []interface{}
+
 		listOpts := cr_client.ListOptions{}
-		for _, opt := range opts {
-			opt.ApplyToList(&listOpts)
-		}
+		listOpts.ApplyOptions(opts)
+
 		if listOpts.LabelSelector == nil || listOpts.LabelSelector.Empty() {
 			klog.Info("Warning! Unfiltered List call. List only returns items watched by the filtered informer")
 		}
-		// Construct result
-		result := cc.secretInformer.GetStore().List()
-		secretList.Items = make([]corev1.Secret, 0, len(result))
-		// Filter items
-		for _, item := range result {
-			if secret, ok := item.(*corev1.Secret); ok && cc.secretMatchesOptions(secret, listOpts) {
-				copy := secret.DeepCopy()
-				copy.SetGroupVersionKind(secretSchema)
-				secretList.Items = append(secretList.Items, *copy)
-			}
+
+		objList = informer.GetStore().List()
+
+		var labelSel labels.Selector
+		if listOpts.LabelSelector != nil {
+			labelSel = listOpts.LabelSelector
 		}
-		secretList.SetGroupVersionKind(secretListSchema)
-		klog.Info("Secret list filtered", "namespace", listOpts.Namespace, "filter", listOpts.LabelSelector, "all", len(result), "filtered", len(secretList.Items))
-		return nil
-	}
-	if _, ok := list.(*corev1.Secret); ok {
-		klog.Info("List with Secret object unsupported")
-		return ErrUnsupported
+
+		runtimeObjList := make([]runtime.Object, 0, len(objList))
+		for _, item := range objList {
+			obj, isObj := item.(runtime.Object)
+			if !isObj {
+				return fmt.Errorf("cache contained %T, which is not an Object", obj)
+			}
+			meta, err := apimeta.Accessor(obj)
+			if err != nil {
+				return err
+			}
+			if labelSel != nil {
+				lbls := labels.Set(meta.GetLabels())
+				if !labelSel.Matches(lbls) {
+					continue
+				}
+			}
+
+			outObj := obj.DeepCopyObject()
+			outObj.GetObjectKind().SetGroupVersionKind(gvk)
+			runtimeObjList = append(runtimeObjList, outObj)
+		}
+		apimeta.SetList(list, runtimeObjList)
 	}
 
-	if cmList, ok := list.(*corev1.ConfigMapList); ok {
-		// Construct filter
-		listOpts := cr_client.ListOptions{}
-		for _, opt := range opts {
-			opt.ApplyToList(&listOpts)
-		}
-		if listOpts.LabelSelector == nil || listOpts.LabelSelector.Empty() {
-			klog.Info("Warning! Unfiltered List call. List only returns items watched by the filtered informer")
-		}
-		// Construct result
-		result := cc.cmInformer.GetStore().List()
-		cmList.Items = make([]corev1.ConfigMap, 0, len(result))
-		// Filter items
-		for _, item := range result {
-			if cm, ok := item.(*corev1.ConfigMap); ok && cc.configMapMatchesOptions(cm, listOpts) {
-				copy := cm.DeepCopy()
-				copy.SetGroupVersionKind(cmSchema)
-				cmList.Items = append(cmList.Items, *copy)
-			}
-		}
-		cmList.SetGroupVersionKind(cmListSchema)
-		klog.Info("ConfigMap list filtered", "namespace", listOpts.Namespace, "filter", listOpts.LabelSelector, "all", len(result), "filtered", len(cmList.Items))
-		return nil
-	}
 	// Passthrough
 	return cc.fallback.List(ctx, list, opts...)
 }
 
-func (cc customCache) secretMatchesOptions(secret *corev1.Secret, opt cr_client.ListOptions) bool {
-	if opt.Namespace != "" && secret.Namespace != opt.Namespace {
-		return false
-	}
-	if opt.FieldSelector != nil && !opt.FieldSelector.Empty() {
-		klog.Info("Field selector for SecretList not supported")
-	}
-	if opt.LabelSelector != nil && !opt.LabelSelector.Empty() {
-		if !opt.LabelSelector.Matches(labels.Set(secret.Labels)) {
-			return false
-		}
-	}
-	return true
-}
-
-func (cc customCache) configMapMatchesOptions(cm *corev1.ConfigMap, opt cr_client.ListOptions) bool {
-	if opt.Namespace != "" && cm.Namespace != opt.Namespace {
-		return false
-	}
-	if opt.FieldSelector != nil && !opt.FieldSelector.Empty() {
-		klog.Info("Field selector for ConfigMapList not supported")
-	}
-	if opt.LabelSelector != nil && !opt.LabelSelector.Empty() {
-		if !opt.LabelSelector.Matches(labels.Set(cm.Labels)) {
-			return false
-		}
-	}
-	return true
-}
-
 func (cc customCache) GetInformer(ctx context.Context, obj runtime.Object) (cr_cache.Informer, error) {
-	if _, ok := obj.(*corev1.Secret); ok {
-		return cc.secretInformer, nil
+	gvk, err := apiutil.GVKForObject(obj, cc.Scheme)
+	if err != nil {
+		return nil, err
 	}
-	if _, ok := obj.(*corev1.SecretList); ok {
-		return cc.secretInformer, nil
-	}
-	if _, ok := obj.(*corev1.ConfigMap); ok {
-		return cc.cmInformer, nil
-	}
-	if _, ok := obj.(*corev1.ConfigMapList); ok {
-		return cc.cmInformer, nil
+
+	if informer, ok := cc.informerMap[gvk]; ok {
+		return informer, nil
 	}
 	// Passthrough
 	return cc.fallback.GetInformer(ctx, obj)
 }
 
 func (cc customCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind) (cr_cache.Informer, error) {
-	if gvk == corev1.SchemeGroupVersion.WithKind("Secret") {
-		return cc.secretInformer, nil
-	}
-	if gvk == corev1.SchemeGroupVersion.WithKind("SecretList") {
-		return cc.secretInformer, nil
-	}
-	if gvk == corev1.SchemeGroupVersion.WithKind("ConfigMap") {
-		return cc.cmInformer, nil
-	}
-	if gvk == corev1.SchemeGroupVersion.WithKind("ConfigMapList") {
-		return cc.cmInformer, nil
+	if informer, ok := cc.informerMap[gvk]; ok {
+		return informer, nil
 	}
 	// Passthrough
 	return cc.fallback.GetInformerForKind(ctx, gvk)
@@ -309,8 +268,9 @@ func (cc customCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVe
 
 func (cc customCache) Start(stopCh <-chan struct{}) error {
 	klog.Info("Start")
-	go cc.secretInformer.Run(stopCh)
-	go cc.cmInformer.Run(stopCh)
+	for _, informer := range cc.informerMap {
+		go informer.Run(stopCh)
+	}
 	return cc.fallback.Start(stopCh)
 }
 
@@ -323,7 +283,9 @@ func (cc customCache) WaitForCacheSync(stop <-chan struct{}) bool {
 		case <-stop:
 			waiting = false
 		case <-time.After(time.Second):
-			waiting = !cc.cmInformer.HasSynced() && !cc.secretInformer.HasSynced()
+			for _, informer := range cc.informerMap {
+				waiting = !informer.HasSynced() && waiting
+			}
 		}
 	}
 	// Wait for fallback cache to sync
@@ -332,21 +294,32 @@ func (cc customCache) WaitForCacheSync(stop <-chan struct{}) bool {
 }
 
 func (cc customCache) IndexField(ctx context.Context, obj runtime.Object, field string, extractValue cr_client.IndexerFunc) error {
-	if _, ok := obj.(*corev1.Secret); ok {
-		klog.Info("IndexField for Secret not supported")
+	gvk, err := apiutil.GVKForObject(obj, cc.Scheme)
+	if err != nil {
+		return err
+	}
+
+	if _, ok := cc.informerMap[gvk]; ok {
+		klog.Infof("IndexField for %s not supported", gvk.String())
 		return ErrUnsupported
 	}
-	if _, ok := obj.(*corev1.SecretList); ok {
-		klog.Info("IndexField for SecretList not supported")
-		return ErrUnsupported
-	}
-	if _, ok := obj.(*corev1.ConfigMap); ok {
-		klog.Info("IndexField for ConfigMap not supported")
-		return ErrUnsupported
-	}
-	if _, ok := obj.(*corev1.ConfigMapList); ok {
-		klog.Info("IndexField for ConfigMapList not supported")
-		return ErrUnsupported
-	}
+
 	return cc.fallback.IndexField(ctx, obj, field, extractValue)
+}
+
+func kindToResource(kind string) string {
+	return strings.ToLower(flect.Pluralize(kind))
+}
+
+// requiresExactMatch checks if the given field selector is of the form `k=v` or `k==v`.
+func requiresExactMatch(sel fields.Selector) (field, val string, required bool) {
+	reqs := sel.Requirements()
+	if len(reqs) != 1 {
+		return "", "", false
+	}
+	req := reqs[0]
+	if req.Operator != selection.Equals && req.Operator != selection.DoubleEquals {
+		return "", "", false
+	}
+	return req.Field, req.Value, true
 }
