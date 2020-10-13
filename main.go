@@ -30,9 +30,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	cache "github.com/IBM/controller-filtered-cache/filteredcache"
+
 	ibmcpcsibmcomv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
 	"github.com/IBM/ibm-secretshare-operator/controllers"
-	"github.com/IBM/ibm-secretshare-operator/controllers/utils"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -60,9 +61,9 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	globalGvks := []schema.GroupVersionKind{
-		corev1.SchemeGroupVersion.WithKind("Secret"),
-		corev1.SchemeGroupVersion.WithKind("ConfigMap"),
+	gvkLabelMap := map[schema.GroupVersionKind]string{
+		corev1.SchemeGroupVersion.WithKind("Secret"):    "secretshareName",
+		corev1.SchemeGroupVersion.WithKind("ConfigMap"): "secretshareName",
 	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
@@ -70,7 +71,7 @@ func main() {
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "2e672f4a.ibm.com",
-		NewCache:           utils.NewCacheBuilder("", "secretshareName", globalGvks...),
+		NewCache:           cache.NewFilteredCacheBuilder(gvkLabelMap),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

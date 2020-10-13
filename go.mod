@@ -3,6 +3,7 @@ module github.com/IBM/ibm-secretshare-operator
 go 1.13
 
 require (
+	github.com/IBM/controller-filtered-cache v0.1.0
 	github.com/gobuffalo/flect v0.1.5
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
