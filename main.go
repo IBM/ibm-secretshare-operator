@@ -61,9 +61,9 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	gvkLabelMap := map[schema.GroupVersionKind]string{
-		corev1.SchemeGroupVersion.WithKind("Secret"):    "secretshareName",
-		corev1.SchemeGroupVersion.WithKind("ConfigMap"): "secretshareName",
+	gvkLabelMap := map[schema.GroupVersionKind]cache.Selector{
+		corev1.SchemeGroupVersion.WithKind("Secret"):    {LabelSelector: "secretshareName"},
+		corev1.SchemeGroupVersion.WithKind("ConfigMap"): {LabelSelector: "secretshareName"},
 	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
