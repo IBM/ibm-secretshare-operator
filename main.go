@@ -21,12 +21,16 @@ import (
 	"os"
 
 	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	cache "github.com/IBM/controller-filtered-cache/filteredcache"
 
 	ibmcpcsibmcomv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
 	"github.com/IBM/ibm-secretshare-operator/controllers"
@@ -57,12 +61,17 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	gvkLabelMap := map[schema.GroupVersionKind]cache.Selector{
+		corev1.SchemeGroupVersion.WithKind("Secret"):    {LabelSelector: "secretshareName"},
+		corev1.SchemeGroupVersion.WithKind("ConfigMap"): {LabelSelector: "secretshareName"},
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "2e672f4a.ibm.com",
+		NewCache:           cache.NewFilteredCacheBuilder(gvkLabelMap),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -71,7 +80,6 @@ func main() {
 
 	if err = (&controllers.SecretShareReconciler{
 		Client: mgr.GetClient(),
-		Reader: mgr.GetAPIReader(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SecretShare")
