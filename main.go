@@ -27,8 +27,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/klog"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	cache "github.com/IBM/controller-filtered-cache/filteredcache"
 
@@ -51,6 +51,8 @@ func init() {
 }
 
 func main() {
+	klog.InitFlags(nil)
+	defer klog.Flush()
 	var metricsAddr string
 	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -58,8 +60,6 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	gvkLabelMap := map[schema.GroupVersionKind]cache.Selector{
 		corev1.SchemeGroupVersion.WithKind("Secret"):    {LabelSelector: "secretshareName"},
@@ -74,7 +74,7 @@ func main() {
 		NewCache:           cache.NewFilteredCacheBuilder(gvkLabelMap),
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		klog.Errorf("unable to start manager: %v", err)
 		os.Exit(1)
 	}
 
@@ -82,7 +82,7 @@ func main() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "SecretShare")
+		klog.Errorf("unable to create controller: %v", err)
 		os.Exit(1)
 	}
 
@@ -90,7 +90,7 @@ func main() {
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		klog.Errorf("problem running manager: %v", err)
 		os.Exit(1)
 	}
 }
