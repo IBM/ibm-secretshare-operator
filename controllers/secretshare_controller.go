@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"time"
+	"os"
 
 	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,6 +40,14 @@ import (
 	ibmcpcsibmcomv1 "github.com/IBM/ibm-secretshare-operator/api/v1"
 )
 
+var operatorNamespace string
+
+func init(){
+	ns, found := os.LookupEnv("OPERATOR_NAMESPACE")
+	if found {
+		operatorNamespace = ns
+	}
+}
 // SecretShareReconciler reconciles a SecretShare object
 type SecretShareReconciler struct {
 	client.Client
@@ -303,8 +312,8 @@ func getCMSecretToSS() handler.ToRequestsFunc {
 func getSecretShareMapper() handler.ToRequestsFunc {
 	return func(object handler.MapObject) []reconcile.Request {
 		secretshare := []reconcile.Request{}
-		if object.Meta.GetNamespace() == "ibm-common-services" {
-			secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: "common-services", Namespace: "ibm-common-services"}})
+		if object.Meta.GetNamespace() == operatorNamespace {
+			secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: "common-services", Namespace: operatorNamespace}})
 		}
 		return secretshare
 	}
@@ -314,17 +323,14 @@ func getSecretShareMapper() handler.ToRequestsFunc {
 func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	subPredicates := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			return e.Meta.GetNamespace() != "ibm-common-services"
+			return e.Meta.GetNamespace() != operatorNamespace
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return e.Meta.GetNamespace() != "ibm-common-services"
+			return e.Meta.GetNamespace() != operatorNamespace
 		},
 	}
 	cmsecretPredicates := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			if e.Meta.GetNamespace() != "ibm-common-services" {
-				return false
-			}
 			labels := e.Meta.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "secretshareName" || labelKey == "secretshareNamespace" {
@@ -334,9 +340,6 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return false
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			if e.MetaNew.GetNamespace() != "ibm-common-services" {
-				return false
-			}
 			labels := e.MetaNew.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "secretshareName" || labelKey == "secretshareNamespace" {
@@ -346,9 +349,6 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			if e.Meta.GetNamespace() != "ibm-common-services" {
-				return false
-			}
 			labels := e.Meta.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "secretshareName" || labelKey == "secretshareNamespace" {
