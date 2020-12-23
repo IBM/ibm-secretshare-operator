@@ -18,8 +18,8 @@ package controllers
 
 import (
 	"context"
-	"time"
 	"os"
+	"time"
 
 	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -42,12 +42,13 @@ import (
 
 var operatorNamespace string
 
-func init(){
+func init() {
 	ns, found := os.LookupEnv("OPERATOR_NAMESPACE")
 	if found {
 		operatorNamespace = ns
 	}
 }
+
 // SecretShareReconciler reconciles a SecretShare object
 type SecretShareReconciler struct {
 	client.Client
