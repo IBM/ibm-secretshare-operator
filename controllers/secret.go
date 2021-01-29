@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -59,6 +60,11 @@ func (r *SecretShareReconciler) addLabelstoSecret(secret *corev1.Secret, ss *ibm
 	if existingSecret.Labels == nil {
 		existingSecret.Labels = make(map[string]string)
 	}
+
+	if existingSecret.Labels["secretshareName"] == ss.Name && existingSecret.Labels["secretshareNamespace"] == ss.Namespace {
+		return nil
+	}
+
 	existingSecret.Labels["secretshareName"] = ss.Name
 	existingSecret.Labels["secretshareNamespace"] = ss.Namespace
 	if err := r.Client.Update(context.TODO(), existingSecret); err != nil {
@@ -71,6 +77,9 @@ func (r *SecretShareReconciler) addLabelstoSecret(secret *corev1.Secret, ss *ibm
 func (r *SecretShareReconciler) createUpdateSecret(secret *corev1.Secret) error {
 	existingSecret, err := r.getSecret(secret.Name, secret.Namespace)
 	if existingSecret != nil {
+		if reflect.DeepEqual(existingSecret.Data, secret.Data) && reflect.DeepEqual(existingSecret.StringData, secret.StringData) && reflect.DeepEqual(existingSecret.Type, secret.Type) {
+			return nil
+		}
 		if err := r.Client.Update(context.TODO(), secret); err != nil {
 			return err
 		}
