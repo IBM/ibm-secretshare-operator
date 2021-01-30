@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -59,6 +60,11 @@ func (r *SecretShareReconciler) addLabelstoConfigmap(cm *corev1.ConfigMap, ss *i
 	if existingCm.Labels == nil {
 		existingCm.Labels = make(map[string]string)
 	}
+
+	if existingCm.Labels["secretshareName"] == ss.Name && existingCm.Labels["secretshareNamespace"] == ss.Namespace {
+		return nil
+	}
+
 	existingCm.Labels["secretshareName"] = ss.Name
 	existingCm.Labels["secretshareNamespace"] = ss.Namespace
 	if err := r.Client.Update(context.TODO(), existingCm); err != nil {
@@ -71,6 +77,9 @@ func (r *SecretShareReconciler) addLabelstoConfigmap(cm *corev1.ConfigMap, ss *i
 func (r *SecretShareReconciler) createUpdateCm(cm *corev1.ConfigMap) error {
 	existingCm, err := r.getCm(cm.Name, cm.Namespace)
 	if existingCm != nil {
+		if reflect.DeepEqual(existingCm.Data, cm.Data) && reflect.DeepEqual(existingCm.BinaryData, cm.BinaryData) {
+			return nil
+		}
 		if err := r.Client.Update(context.TODO(), cm); err != nil {
 			return err
 		}
