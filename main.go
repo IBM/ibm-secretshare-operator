@@ -62,8 +62,8 @@ func main() {
 	flag.Parse()
 
 	gvkLabelMap := map[schema.GroupVersionKind]cache.Selector{
-		corev1.SchemeGroupVersion.WithKind("Secret"):    {LabelSelector: "secretshareName"},
-		corev1.SchemeGroupVersion.WithKind("ConfigMap"): {LabelSelector: "secretshareName"},
+		corev1.SchemeGroupVersion.WithKind("Secret"):    {LabelSelector: "manage-by-secretshare"},
+		corev1.SchemeGroupVersion.WithKind("ConfigMap"): {LabelSelector: "manage-by-secretshare"},
 	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
