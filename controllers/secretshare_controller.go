@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"os"
+	"strings"
 	"time"
 
 	olmv1alpha1 "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
@@ -300,11 +301,15 @@ func (r *SecretShareReconciler) deleteCopiedCm(cmName string, cmShare ibmcpcsibm
 func getCMSecretToSS() handler.ToRequestsFunc {
 	return func(object handler.MapObject) []reconcile.Request {
 		secretshare := []reconcile.Request{}
-		lables := object.Meta.GetLabels()
-		name, nameOk := lables["secretshareName"]
-		ns, namespaceOK := lables["secretshareNamespace"]
-		if nameOk && namespaceOK {
-			secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}})
+		labels := object.Meta.GetLabels()
+		for ssKey, ss := range labels {
+			if ss == "secretsharekey" {
+				ssKeyList := strings.Split(ssKey, "/")
+				if len(ssKeyList) != 2 {
+					continue
+				}
+				secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: ssKeyList[1], Namespace: ssKeyList[0]}})
+			}
 		}
 		return secretshare
 	}
@@ -334,7 +339,7 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		CreateFunc: func(e event.CreateEvent) bool {
 			labels := e.Meta.GetLabels()
 			for labelKey := range labels {
-				if labelKey == "secretshareName" || labelKey == "secretshareNamespace" {
+				if labelKey == "manage-by-secretshare" {
 					return true
 				}
 			}
@@ -343,7 +348,7 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			labels := e.MetaNew.GetLabels()
 			for labelKey := range labels {
-				if labelKey == "secretshareName" || labelKey == "secretshareNamespace" {
+				if labelKey == "manage-by-secretshare" {
 					return true
 				}
 			}
@@ -352,7 +357,7 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			labels := e.Meta.GetLabels()
 			for labelKey := range labels {
-				if labelKey == "secretshareName" || labelKey == "secretshareNamespace" {
+				if labelKey == "manage-by-secretshare" {
 					return true
 				}
 			}
