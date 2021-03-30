@@ -204,7 +204,7 @@ multiarch-image: $(CONFIG_DOCKER_TARGET)
 # Generate bundle manifests and metadata, then validate generated files.
 bundle: manifests
 	operator-sdk generate kustomize manifests -q
-	kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+	kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $(RELEASE_VERSION) $(BUNDLE_METADATA_OPTS)
 	operator-sdk bundle validate ./bundle
 
 # Build the bundle image.
