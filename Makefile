@@ -78,7 +78,7 @@ endif
 include common/Makefile.common.mk
 
 # Default bundle image tag
-BUNDLE_IMG ?= ibm-secretshare-operator-bundle:$(VERSION)
+BUNDLE_IMG ?= ibm-secretshare-operator-bundle:$(RELEASE_VERSION)
 # Options for 'bundle-build'
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
