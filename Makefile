@@ -191,7 +191,7 @@ build:
 
 build-push-image: build-image push-image
 
-build-image:
+build-image: $(CONFIG_DOCKER_TARGET)
 	@echo "Building the $(IMAGE_NAME) docker image for $(LOCAL_ARCH)..."
 	@docker build -t $(REGISTRY)/$(IMAGE_NAME)-$(LOCAL_ARCH):$(VERSION) --build-arg VCS_REF=$(VCS_REF) --build-arg VCS_URL=$(VCS_URL) --build-arg GOARCH=$(LOCAL_ARCH) .
 
