@@ -123,14 +123,13 @@ func (r *SecretShareReconciler) copySecret(instance *ibmcpcsibmcomv1.SecretShare
 				requeue = true
 				continue
 			} else {
-				if r.checkSub(secretOperatorMapping[secretName], ns) {
+				if sub, ok := secretOperatorMapping[secretName]; ok && !r.checkSub(sub, ns) {
+					instance.UpdateSecretStatus(ns+"/"+secretName, ibmcpcsibmcomv1.NotEnabled)
+				} else {
 					instance.UpdateSecretStatus(ns+"/"+secretName, ibmcpcsibmcomv1.NotFound)
 					requeue = true
-					continue
-				} else {
-					instance.UpdateSecretStatus(ns+"/"+secretName, ibmcpcsibmcomv1.NotEnabled)
-					continue
 				}
+				continue
 			}
 		} else {
 			// Add labels for SecretShare instance
@@ -187,14 +186,13 @@ func (r *SecretShareReconciler) copyConfigmap(instance *ibmcpcsibmcomv1.SecretSh
 				requeue = true
 				continue
 			} else {
-				if r.checkSub(cmOperatorMapping[cmName], ns) {
+				if sub, ok := cmOperatorMapping[cmName]; ok && !r.checkSub(sub, ns) {
+					instance.UpdateConfigmapStatus(ns+"/"+cmName, ibmcpcsibmcomv1.NotEnabled)
+				} else {
 					instance.UpdateConfigmapStatus(ns+"/"+cmName, ibmcpcsibmcomv1.NotFound)
 					requeue = true
-					continue
-				} else {
-					instance.UpdateConfigmapStatus(ns+"/"+cmName, ibmcpcsibmcomv1.NotEnabled)
-					continue
 				}
+				continue
 			}
 		} else {
 			// Add labels for SecretShare instance
