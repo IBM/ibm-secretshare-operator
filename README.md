@@ -19,8 +19,10 @@ spec:
   - secretname: icp-management-ingress-tls-secret
     sharewith:
     - namespace: kube-system
+  - secretname: grafana-secret
+    sharewith:
     - namespace: kube-system
-      name: route-tls-secret 
+      name: monitoring-grafana-secret
   - secretname: icp-metering-api-secret
     sharewith:
     - namespace: kube-system
@@ -52,10 +54,10 @@ spec:
 
 In this example, a SecretShare custom resource named *common-services* would be created in the *ibm-common-services* namespace.
 
-The operator watches all secrets and configmaps in the namespace and creates or updates copies (if they are changed) to the namespaces and (optionally) names specified in the CR.  The specification above would cause the following to be done by the operator (thsi list is not complete, but an example from which you can get the behavior):
+The operator watches all secrets and configmaps in the namespace and creates or updates copies (if they are changed) to the namespaces and (optionally) names specified in the CR.  The specification above would cause the following to be done by the operator (this list is not complete, but an example from which you can get the behavior):
 
 1. The secret named *icp-management-ingress-tls-secret*, if/when found, would be copied into namespace *kube-system*.
-2. The secret named *icp-management-ingress-tls-secret*, if/when found, would be copied into namespace *kube-system* with the name *route-tls-secret*.
+2. The secret named *grafana-secret*, if/when found, would be copied into namespace *kube-system* with the name *monitoring-grafana-secret*.
 3. The secret named *icp-metering-api-secret*, if/when found, would be copied into namespace *kube-system*.
 5. The configmap named *ibm-cloud-info*, if/when found, would be copied into namespace *kube-public*.
 
