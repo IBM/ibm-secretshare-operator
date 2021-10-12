@@ -45,4 +45,4 @@ echo "Updated the replaces version line"
 
 #Update version.go to new dev version
 sed -i "s/$CURRENT_DEV_CSV/$NEW_DEV_CSV/" version/version.go
-echo "Updated the version.go with new version (Push Enter when done): "
+echo "Updated the version.go with new version"
