@@ -77,7 +77,7 @@ func (r *SecretShareReconciler) addLabelstoSecret(secret *corev1.Secret, ss *ibm
 func (r *SecretShareReconciler) createUpdateSecret(secret *corev1.Secret) error {
 	existingSecret, err := r.getSecret(secret.Name, secret.Namespace)
 	if existingSecret != nil {
-		if reflect.DeepEqual(existingSecret.Data, secret.Data) && reflect.DeepEqual(existingSecret.StringData, secret.StringData) && reflect.DeepEqual(existingSecret.Type, secret.Type) {
+		if reflect.DeepEqual(existingSecret.Labels, secret.Labels) && reflect.DeepEqual(existingSecret.Data, secret.Data) && reflect.DeepEqual(existingSecret.StringData, secret.StringData) && reflect.DeepEqual(existingSecret.Type, secret.Type) {
 			return nil
 		}
 		if err := r.Client.Update(context.TODO(), secret); err != nil {
