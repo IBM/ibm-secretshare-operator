@@ -233,6 +233,7 @@ func (r *SecretShareReconciler) copySecretToTargetNs(secret *corev1.Secret, targ
 		secretlabel[k] = v
 	}
 	secretlabel["ibmcpcs.ibm.com/managed-by"] = "secretshare"
+	secretlabel["manage-by-secretshare"] = "true"
 	targetSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name,
@@ -257,6 +258,7 @@ func (r *SecretShareReconciler) copyConfigmapToTargetNs(cm *corev1.ConfigMap, ta
 		cmlabel[k] = v
 	}
 	cmlabel["ibmcpcs.ibm.com/managed-by"] = "secretshare"
+	cmlabel["manage-by-secretshare"] = "true"
 	targetCm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cm.Name,
