@@ -77,7 +77,7 @@ func (r *SecretShareReconciler) addLabelstoConfigmap(cm *corev1.ConfigMap, ss *i
 func (r *SecretShareReconciler) createUpdateCm(cm *corev1.ConfigMap) error {
 	existingCm, err := r.getCm(cm.Name, cm.Namespace)
 	if existingCm != nil {
-		if reflect.DeepEqual(existingCm.Data, cm.Data) && reflect.DeepEqual(existingCm.BinaryData, cm.BinaryData) {
+		if reflect.DeepEqual(existingCm.Labels, cm.Labels) && reflect.DeepEqual(existingCm.Data, cm.Data) && reflect.DeepEqual(existingCm.BinaryData, cm.BinaryData) {
 			return nil
 		}
 		if err := r.Client.Update(context.TODO(), cm); err != nil {
