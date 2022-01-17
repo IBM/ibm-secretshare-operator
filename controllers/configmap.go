@@ -61,11 +61,11 @@ func (r *SecretShareReconciler) addLabelstoConfigmap(cm *corev1.ConfigMap, ss *i
 		existingCm.Labels = make(map[string]string)
 	}
 
-	ssKey := ss.Namespace + "/" + ss.Name
+	ssValue := ss.Namespace + "." + ss.Name
 	if len(existingCm.Labels["manage-by-secretshare"]) == 0 {
 		existingCm.Labels["manage-by-secretshare"] = "true"
 	}
-	existingCm.Labels[ssKey] = "secretsharekey"
+	existingCm.Labels["secretsharekey"] = ssValue
 
 	if err := r.Client.Update(context.TODO(), existingCm); err != nil {
 		return err

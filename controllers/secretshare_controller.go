@@ -303,8 +303,8 @@ func getCMSecretToSS() handler.ToRequestsFunc {
 		secretshare := []reconcile.Request{}
 		labels := object.Meta.GetLabels()
 		for ssKey, ss := range labels {
-			if ss == "secretsharekey" {
-				ssKeyList := strings.Split(ssKey, "/")
+			if ssKey == "secretsharekey" {
+				ssKeyList := strings.Split(ss, ".")
 				if len(ssKeyList) != 2 {
 					continue
 				}
