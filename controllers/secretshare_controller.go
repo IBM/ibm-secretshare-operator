@@ -303,12 +303,12 @@ func getCMSecretToSS() handler.ToRequestsFunc {
 		secretshare := []reconcile.Request{}
 		labels := object.Meta.GetLabels()
 		for ssKey, ss := range labels {
-			if ssKey == "secretsharekey" {
-				ssKeyList := strings.Split(ss, ".")
+			if ss == "secretsharekey" {
+				ssKeyList := strings.Split(ssKey, "/")
 				if len(ssKeyList) != 2 {
 					continue
 				}
-				secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: ssKeyList[1], Namespace: ssKeyList[0]}})
+				secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: ssKeyList[0], Namespace: ssKeyList[1]}})
 			}
 		}
 		return secretshare

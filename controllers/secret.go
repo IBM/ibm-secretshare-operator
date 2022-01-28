@@ -60,12 +60,12 @@ func (r *SecretShareReconciler) addLabelstoSecret(secret *corev1.Secret, ss *ibm
 	if existingSecret.Labels == nil {
 		existingSecret.Labels = make(map[string]string)
 	}
-	ssValue := ss.Namespace + "." + ss.Name
+	ssKey := ss.Name + "/" + ss.Namespace
 	if len(existingSecret.Labels["manage-by-secretshare"]) == 0 {
 		existingSecret.Labels["manage-by-secretshare"] = "true"
 	}
 
-	existingSecret.Labels["secretsharekey"] = ssValue
+	existingSecret.Labels[ssKey] = "secretsharekey"
 
 	if err := r.Client.Update(context.TODO(), existingSecret); err != nil {
 		return err
