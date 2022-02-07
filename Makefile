@@ -33,7 +33,7 @@ NAMESPACE=ibm-common-services
 # IMAGE_REPO, IMAGE_NAME and RELEASE_TAG environment variable.
 IMAGE_REPO ?= quay.io/opencloudio
 IMAGE_NAME ?= ibm-secretshare-operator
-OPERATOR_VERSION ?= 1.3.3
+OPERATOR_VERSION ?= $(shell cat ./version/version.go | grep "Version =" | awk '{ print $$3}' | tr -d '"')
 
 ifeq ($(BUILD_LOCALLY),0)
 REGISTRY ?= "hyc-cloud-private-integration-docker-local.artifactory.swg-devops.com/ibmcom"
