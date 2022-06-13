@@ -105,6 +105,10 @@ func (r *SecretShareReconciler) copySecret(instance *ibmcpcsibmcomv1.SecretShare
 	ns := instance.Namespace
 	secretList := instance.Spec.Secretshares
 	requeue := false
+	if secretList == nil {
+		requeue = true
+		return requeue
+	}
 	for _, secretShare := range secretList {
 		running := true
 		secretName := secretShare.Secretname
