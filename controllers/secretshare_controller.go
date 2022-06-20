@@ -105,7 +105,8 @@ func (r *SecretShareReconciler) copySecret(instance *ibmcpcsibmcomv1.SecretShare
 	ns := instance.Namespace
 	secretList := instance.Spec.Secretshares
 	requeue := false
-	if secretList == nil {
+	if len(secretList) == 0 {
+		klog.Infof("No secret to copy")
 		requeue = true
 		return requeue
 	}
