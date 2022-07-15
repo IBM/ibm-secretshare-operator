@@ -263,7 +263,7 @@ func (r *SecretShareReconciler) copyConfigmapToTargetNs(cm *corev1.ConfigMap, ta
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cm.Name,
 			Namespace: targetNs,
-			Labels:    cm.Labels,
+			Labels:    cmlabel,
 		},
 		Data:       cm.Data,
 		BinaryData: cm.BinaryData,
