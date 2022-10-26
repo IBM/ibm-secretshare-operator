@@ -37,8 +37,6 @@ spec:
                 - amd64
                 - ppc64le
                 - s390x
-      securityContext:
-        runAsNonRoot: true
       containers:
       - command:
         - /manager
@@ -57,4 +55,6 @@ spec:
           requests:
             cpu: 200m
             memory: 200Mi
+        securityContext:
+          runAsNonRoot: true
       terminationGracePeriodSeconds: 10
