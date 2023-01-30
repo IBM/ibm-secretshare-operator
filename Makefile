@@ -35,9 +35,9 @@ IMAGE_REPO ?= quay.io/opencloudio
 IMAGE_NAME ?= ibm-secretshare-operator
 
 ifeq ($(BUILD_LOCALLY),0)
-REGISTRY ?= "hyc-cloud-private-integration-docker-local.artifactory.swg-devops.com/ibmcom"
+REGISTRY ?= "docker-na-public.artifactory.swg-devops.com/hyc-cloud-private-integration-docker-local/ibmcom"
 else
-REGISTRY ?= "hyc-cloud-private-scratch-docker-local.artifactory.swg-devops.com/ibmcom"
+REGISTRY ?= "docker-na-public.artifactory.swg-devops.com/hyc-cloud-private-scratch-docker-local/ibmcom"
 endif
 
 QUAY_USERNAME ?=
