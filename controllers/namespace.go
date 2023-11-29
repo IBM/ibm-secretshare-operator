@@ -20,19 +20,13 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 // ensureNs makes sure if the target namespace exist
 func (r *SecretShareReconciler) ensureNs(ns string) error {
 	if err := r.getNs(ns); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		if err := r.createNs(ns); err != nil {
-			return err
-		}
+		return err
 	}
 	return nil
 }
