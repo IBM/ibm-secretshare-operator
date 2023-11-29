@@ -39,13 +39,3 @@ func (r *SecretShareReconciler) getNs(ns string) error {
 	}
 	return nil
 }
-
-// createNs creates the target namespace
-func (r *SecretShareReconciler) createNs(ns string) error {
-	targetNs := &corev1.Namespace{}
-	targetNs.SetName(ns)
-	if err := r.Client.Create(context.TODO(), targetNs); err != nil {
-		return err
-	}
-	return nil
-}
