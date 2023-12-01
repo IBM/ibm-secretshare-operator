@@ -20,19 +20,13 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 // ensureNs makes sure if the target namespace exist
 func (r *SecretShareReconciler) ensureNs(ns string) error {
 	if err := r.getNs(ns); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		if err := r.createNs(ns); err != nil {
-			return err
-		}
+		return err
 	}
 	return nil
 }
@@ -41,16 +35,6 @@ func (r *SecretShareReconciler) ensureNs(ns string) error {
 func (r *SecretShareReconciler) getNs(ns string) error {
 	targetNs := &corev1.Namespace{}
 	if err := r.Client.Get(context.TODO(), types.NamespacedName{Name: ns}, targetNs); err != nil {
-		return err
-	}
-	return nil
-}
-
-// createNs creates the target namespace
-func (r *SecretShareReconciler) createNs(ns string) error {
-	targetNs := &corev1.Namespace{}
-	targetNs.SetName(ns)
-	if err := r.Client.Create(context.TODO(), targetNs); err != nil {
 		return err
 	}
 	return nil

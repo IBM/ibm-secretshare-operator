@@ -28,7 +28,7 @@ spec:
     - namespace: kube-system
   - secretname: oauth-client-secret
     sharewith:
-    - namespace: services
+    - namespace: kube-public
   - secretname: ibmcloud-cluster-ca-cert
     sharewith:
     - namespace: kube-public
@@ -36,7 +36,7 @@ spec:
   configmapshares: 
   - configmapname: oauth-client-map
     sharewith:
-    - namespace: services
+    - namespace: kube-public
   - configmapname: ibm-cloud-info
     sharewith:
     - namespace: kube-system
