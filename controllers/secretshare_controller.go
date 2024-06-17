@@ -329,15 +329,15 @@ func getSecretShareMapper() handler.ToRequestsFunc {
 func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	subPredicates := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			return e.Meta.GetNamespace() != operatorNamespace
+			return e.Object.GetNamespace() != operatorNamespace
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return e.Meta.GetNamespace() != operatorNamespace
+			return e.Object.GetNamespace() != operatorNamespace
 		},
 	}
 	cmsecretPredicates := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			labels := e.Meta.GetLabels()
+			labels := e.Object.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "manage-by-secretshare" {
 					return true
@@ -346,7 +346,7 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return false
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			labels := e.MetaNew.GetLabels()
+			labels := e.ObjectNew.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "manage-by-secretshare" {
 					return true
@@ -355,7 +355,7 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			labels := e.Meta.GetLabels()
+			labels := e.Object.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "manage-by-secretshare" {
 					return true
