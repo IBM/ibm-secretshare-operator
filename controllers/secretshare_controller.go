@@ -298,10 +298,10 @@ func (r *SecretShareReconciler) deleteCopiedCm(cmName string, cmShare ibmcpcsibm
 	return requeue
 }
 
-func getCMSecretToSS() handler.ToRequestsFunc {
-	return func(object handler.MapObject) []reconcile.Request {
+func getCMSecretToSS() handler.MapFunc {
+	return func(object client.Object) []reconcile.Request {
 		secretshare := []reconcile.Request{}
-		labels := object.Meta.GetLabels()
+		labels := object.GetLabels()
 		for ssKey, ss := range labels {
 			if ss == "secretsharekey" {
 				ssKeyList := strings.Split(ssKey, "/")
@@ -315,10 +315,10 @@ func getCMSecretToSS() handler.ToRequestsFunc {
 	}
 }
 
-func getSecretShareMapper() handler.ToRequestsFunc {
-	return func(object handler.MapObject) []reconcile.Request {
+func getSecretShareMapper() handler.MapFunc {
+	return func(object client.Object) []reconcile.Request {
 		secretshare := []reconcile.Request{}
-		if object.Meta.GetNamespace() == operatorNamespace {
+		if object.GetNamespace() == operatorNamespace {
 			secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: "common-services", Namespace: operatorNamespace}})
 		}
 		return secretshare
@@ -369,17 +369,17 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&ibmcpcsibmcomv1.SecretShare{}).
 		Watches(
 			&source.Kind{Type: &corev1.ConfigMap{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: getCMSecretToSS()},
+			handler.EnqueueRequestsFromMapFunc(getCMSecretToSS()),
 			builder.WithPredicates(cmsecretPredicates),
 		).
 		Watches(
 			&source.Kind{Type: &corev1.Secret{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: getCMSecretToSS()},
+			handler.EnqueueRequestsFromMapFunc(getCMSecretToSS()),
 			builder.WithPredicates(cmsecretPredicates),
 		).
 		Watches(
 			&source.Kind{Type: &olmv1alpha1.Subscription{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: getSecretShareMapper()},
+			handler.EnqueueRequestsFromMapFunc(getSecretShareMapper()),
 			builder.WithPredicates(subPredicates),
 		).
 		Complete(r)
