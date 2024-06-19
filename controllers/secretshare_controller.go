@@ -61,8 +61,7 @@ type SecretShareReconciler struct {
 // +kubebuilder:rbac:groups=,resources=secret;configmap,verbs=get;update;patch;create;delete;list;watch
 
 // Reconcile reads that state of the cluster for a SecretShare object and makes changes based on the state read
-func (r *SecretShareReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *SecretShareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
 	klog.V(1).Info("Reconciling SecretShare")
 
@@ -298,10 +297,10 @@ func (r *SecretShareReconciler) deleteCopiedCm(cmName string, cmShare ibmcpcsibm
 	return requeue
 }
 
-func getCMSecretToSS() handler.ToRequestsFunc {
-	return func(object handler.MapObject) []reconcile.Request {
+func getCMSecretToSS() handler.MapFunc {
+	return func(object client.Object) []reconcile.Request {
 		secretshare := []reconcile.Request{}
-		labels := object.Meta.GetLabels()
+		labels := object.GetLabels()
 		for ssKey, ss := range labels {
 			if ss == "secretsharekey" {
 				ssKeyList := strings.Split(ssKey, "/")
@@ -315,10 +314,10 @@ func getCMSecretToSS() handler.ToRequestsFunc {
 	}
 }
 
-func getSecretShareMapper() handler.ToRequestsFunc {
-	return func(object handler.MapObject) []reconcile.Request {
+func getSecretShareMapper() handler.MapFunc {
+	return func(object client.Object) []reconcile.Request {
 		secretshare := []reconcile.Request{}
-		if object.Meta.GetNamespace() == operatorNamespace {
+		if object.GetNamespace() == operatorNamespace {
 			secretshare = append(secretshare, reconcile.Request{NamespacedName: types.NamespacedName{Name: "common-services", Namespace: operatorNamespace}})
 		}
 		return secretshare
@@ -329,15 +328,15 @@ func getSecretShareMapper() handler.ToRequestsFunc {
 func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	subPredicates := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			return e.Meta.GetNamespace() != operatorNamespace
+			return e.Object.GetNamespace() != operatorNamespace
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return e.Meta.GetNamespace() != operatorNamespace
+			return e.Object.GetNamespace() != operatorNamespace
 		},
 	}
 	cmsecretPredicates := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			labels := e.Meta.GetLabels()
+			labels := e.Object.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "manage-by-secretshare" {
 					return true
@@ -346,7 +345,7 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return false
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			labels := e.MetaNew.GetLabels()
+			labels := e.ObjectNew.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "manage-by-secretshare" {
 					return true
@@ -355,7 +354,7 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return false
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			labels := e.Meta.GetLabels()
+			labels := e.Object.GetLabels()
 			for labelKey := range labels {
 				if labelKey == "manage-by-secretshare" {
 					return true
@@ -369,17 +368,17 @@ func (r *SecretShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&ibmcpcsibmcomv1.SecretShare{}).
 		Watches(
 			&source.Kind{Type: &corev1.ConfigMap{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: getCMSecretToSS()},
+			handler.EnqueueRequestsFromMapFunc(getCMSecretToSS()),
 			builder.WithPredicates(cmsecretPredicates),
 		).
 		Watches(
 			&source.Kind{Type: &corev1.Secret{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: getCMSecretToSS()},
+			handler.EnqueueRequestsFromMapFunc(getCMSecretToSS()),
 			builder.WithPredicates(cmsecretPredicates),
 		).
 		Watches(
 			&source.Kind{Type: &olmv1alpha1.Subscription{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: getSecretShareMapper()},
+			handler.EnqueueRequestsFromMapFunc(getSecretShareMapper()),
 			builder.WithPredicates(subPredicates),
 		).
 		Complete(r)
