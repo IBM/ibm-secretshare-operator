@@ -61,8 +61,8 @@ type SecretShareReconciler struct {
 // +kubebuilder:rbac:groups=,resources=secret;configmap,verbs=get;update;patch;create;delete;list;watch
 
 // Reconcile reads that state of the cluster for a SecretShare object and makes changes based on the state read
-func (r *SecretShareReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *SecretShareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx = context.Background()
 
 	klog.V(1).Info("Reconciling SecretShare")
 
