@@ -62,7 +62,6 @@ type SecretShareReconciler struct {
 
 // Reconcile reads that state of the cluster for a SecretShare object and makes changes based on the state read
 func (r *SecretShareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = context.Background()
 
 	klog.V(1).Info("Reconciling SecretShare")
 
